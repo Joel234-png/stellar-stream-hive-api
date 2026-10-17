@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
+import ThemeToggle from "@/components/ThemeToggle";
+
 const FOCUS =
   "rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 dark:focus-visible:ring-brand-400";
 
@@ -46,6 +48,7 @@ export default function SiteHeader() {
             {repo.label}
           </a>
         ))}
+        <ThemeToggle />
       </nav>
     </header>
   );
