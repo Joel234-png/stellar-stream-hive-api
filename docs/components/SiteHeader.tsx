@@ -1,5 +1,8 @@
 import Link from "next/link";
 
+const FOCUS =
+  "rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 dark:focus-visible:ring-brand-400";
+
 const REPOS = [
   { label: "API", href: "https://github.com/Stellar-Hive/stellar-stream-hive-api" },
   { label: "Contracts", href: "https://github.com/Stellar-Hive/stellar-stream-hive-contract" },
@@ -9,7 +12,10 @@ const REPOS = [
 export default function SiteHeader() {
   return (
     <header className="sticky top-0 z-40 flex h-16 items-center justify-between border-b border-slate-200 bg-white/80 px-6 backdrop-blur dark:border-slate-800 dark:bg-slate-950/80">
-      <Link href="/" className="flex items-center gap-2 font-semibold text-slate-900 dark:text-slate-100">
+      <Link
+        href="/"
+        className={`flex items-center gap-2 font-semibold text-slate-900 dark:text-slate-100 ${FOCUS}`}
+      >
         <span aria-hidden className="text-xl">
           🌊
         </span>
@@ -18,7 +24,7 @@ export default function SiteHeader() {
       <nav className="flex items-center gap-5 text-sm">
         <Link
           href="/docs/getting-started"
-          className="text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100"
+          className={`text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100 ${FOCUS}`}
         >
           Docs
         </Link>
@@ -28,7 +34,7 @@ export default function SiteHeader() {
             href={repo.href}
             target="_blank"
             rel="noreferrer"
-            className="hidden text-slate-600 hover:text-slate-900 sm:inline dark:text-slate-400 dark:hover:text-slate-100"
+            className={`hidden text-slate-600 hover:text-slate-900 sm:inline dark:text-slate-400 dark:hover:text-slate-100 ${FOCUS}`}
           >
             {repo.label}
           </a>
