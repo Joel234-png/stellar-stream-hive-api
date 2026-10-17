@@ -1,4 +1,7 @@
+"use client";
+
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 
 const FOCUS =
   "rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 dark:focus-visible:ring-brand-400";
@@ -10,6 +13,9 @@ const REPOS = [
 ];
 
 export default function SiteHeader() {
+  const pathname = usePathname();
+  const onDocs = pathname.startsWith("/docs");
+
   return (
     <header className="sticky top-0 z-40 flex h-16 items-center justify-between border-b border-slate-200 bg-white/80 px-6 backdrop-blur dark:border-slate-800 dark:bg-slate-950/80">
       <Link
@@ -21,9 +27,10 @@ export default function SiteHeader() {
         </span>
         Stellar Stream Hive
       </Link>
-      <nav className="flex items-center gap-5 text-sm">
+      <nav aria-label="Primary" className="flex items-center gap-5 text-sm">
         <Link
           href="/docs/getting-started"
+          aria-current={onDocs ? "page" : undefined}
           className={`text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100 ${FOCUS}`}
         >
           Docs
