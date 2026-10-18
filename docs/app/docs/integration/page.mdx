@@ -122,6 +122,52 @@ def total_withdrawable(recipient: str) -> int:
 print(total_withdrawable("GDEF...UVW"))  # total in stroops
 ```
 
+## Rust example
+
+The same read in Rust, using `reqwest` and `serde`. The amounts deserialize as
+`String` and are parsed into `i128`, which is the same representation the API
+uses on the wire. This reads the first page of a recipient's streams (the
+default page size is 50):
+
+```toml
+[dependencies]
+reqwest = { version = "0.12", features = ["json"] }
+serde = { version = "1", features = ["derive"] }
+tokio = { version = "1", features = ["full"] }
+```
+
+```rust
+use serde::Deserialize;
+
+#[derive(Deserialize)]
+struct StreamView {
+    id: String,
+    status: String,
+    // Amounts are i128 values serialized as strings, so parse them explicitly.
+    withdrawable_amount: String,
+}
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let streams: Vec<StreamView> = reqwest::get("http://localhost:8080/recipients/GDEF...UVW")
+        .await?
+        .error_for_status()?
+        .json()
+        .await?;
+
+    let mut total: i128 = 0;
+    for stream in &streams {
+        println!(
+            "stream {} ({}): {}",
+            stream.id, stream.status, stream.withdrawable_amount
+        );
+        total += stream.withdrawable_amount.parse::<i128>()?;
+    }
+    println!("total withdrawable (stroops): {total}");
+    Ok(())
+}
+```
+
 ## Computing `streamed_amount` client-side
 
 You don't have to trust the API's (or the contract's) computed
