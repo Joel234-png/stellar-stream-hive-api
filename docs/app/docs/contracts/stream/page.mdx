@@ -307,6 +307,48 @@ doc comment for the canonical reference; reproduced here for convenience:
 The indexer only needs the first three; `cancel`'s `streamed_now` is what the
 recipient keeps (and may still withdraw, minus `withdrawn`).
 
+## CLI examples
+
+These use the [Stellar CLI](https://developers.stellar.org/docs/tools/cli)
+against testnet, with the `sender` and `recipient` identities from the
+[Getting Started](/docs/getting-started#quickstart-create-your-first-testnet-stream)
+walkthrough. Replace `<STREAM_CONTRACT_ID>` with the deployed contract address.
+
+### Cancel a stream
+
+Only the sender can cancel, and only if the stream was created with
+`cancellable` set to `true`. The sender signs the transaction:
+
+```bash
+stellar contract invoke \
+  --id <STREAM_CONTRACT_ID> \
+  --source sender \
+  --network testnet \
+  -- cancel_stream \
+  --sender "$(stellar keys address sender)" \
+  --stream_id 0
+```
+
+### Check the status afterwards
+
+`get_status` is read-only and needs no signing. After a successful cancel it
+reports `Cancelled`:
+
+```bash
+stellar contract invoke \
+  --id <STREAM_CONTRACT_ID> \
+  --network testnet \
+  -- get_status --stream_id 0
+```
+
+```text
+"Cancelled"
+```
+
+The recipient keeps whatever had streamed at the cancel ledger and can still
+withdraw it, minus what they had already withdrawn. See
+[Events emitted](#events-emitted) for the `cancel` event's fields.
+
 ## Security notes
 
 - `withdraw` and `cancel_stream` both call into the Vault, but the Vault does
