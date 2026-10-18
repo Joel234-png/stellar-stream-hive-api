@@ -95,9 +95,83 @@ Non-2xx responses return:
   limitation, not a bug.
 </CalloutBox>
 
+## Health and readiness
+
+Two unauthenticated endpoints exist for monitoring and orchestration.
+
+### `GET /health`
+
+```bash
+curl http://localhost:8080/health
+```
+
+Returns the plain text `ok` with status `200`. It only signals that the HTTP
+server is up and answering -- it says nothing about whether the indexer has
+synced.
+
+### `GET /ready`
+
+```bash
+curl http://localhost:8080/ready
+```
+
+```json
+{
+  "synced": true,
+  "latest_ledger": 123456,
+  "contract_configured": true,
+  "indexed_streams": 42
+}
+```
+
+`/ready` **always responds `200`**, even when the indexer is not ready, so
+clients must read the body rather than relying on the status code:
+
+- `synced` is `false` until the indexer has observed a ledger from Soroban RPC.
+  While it is `false`, `latest_ledger` is `0` and no events have been processed
+  yet.
+- `contract_configured` is `false` when `STREAM_CONTRACT_ID` is unset or is not
+  a real `C...` contract address. In that case no stream events can be decoded
+  and `/streams` stays empty.
+- `latest_ledger` is the most recently observed ledger sequence number.
+- `indexed_streams` is the number of streams currently held in memory.
+
+## Response headers
+
+| Header | When | Meaning |
+|---|---|---|
+| `Content-Type` | Every response | `application/json` |
+| `X-Total-Count` | List endpoints: `/streams`, `/senders/:address`, `/recipients/:address` | The number of matching items **before** `limit`/`offset` are applied |
+
+`X-Total-Count` is exposed to browsers via `Access-Control-Expose-Headers`, so
+cross-origin scripts can read it and page through list results. See
+[Filtering and pagination](/docs/api/streams#filtering-and-pagination) on the
+Streams page for how `limit` and `offset` interact with it.
+
 ## CORS
 
-All routes are served with a permissive CORS policy (`Access-Control-Allow-Origin: *`),
-since every endpoint is read-only public data with no notion of a logged-in
-user -- there is nothing a cross-origin request could do here that a same-origin
-one couldn't.
+`Access-Control-Allow-Origin` defaults to `*` (any origin). Setting
+`CORS_ALLOWED_ORIGINS` to a comma-separated list of origins restricts it to
+only those origins; leaving it unset, or setting it to a lone `*`, means any
+origin. Whitespace and trailing slashes are trimmed from each entry.
+
+Allowed methods are `GET`, `HEAD`, and `OPTIONS`. Only the `Accept` and
+`Content-Type` request headers are allowed. `X-Total-Count` is exposed to
+browsers via `Access-Control-Expose-Headers` so cross-origin scripts can page
+through list results.
+
+The policy is permissive by default because every endpoint is read-only public
+data with no notion of a logged-in user -- there is nothing a cross-origin
+request could do here that a same-origin one couldn't.
+
+## Environment variables
+
+| Name | Default | Meaning |
+|---|---|---|
+| `SOROBAN_RPC_URL` | `https://soroban-testnet.stellar.org` | Soroban RPC endpoint the indexer polls for events. |
+| `STREAM_CONTRACT_ID` | _(unset)_ | The Stream contract id to index. Unset means the indexer runs but `/streams` stays empty. |
+| `BIND_ADDR` | `0.0.0.0:8080` | Address and port the HTTP server binds to. |
+| `POLL_INTERVAL_SECS` | `10` | Seconds between Soroban RPC polls. |
+| `INDEXER_BACKFILL_LEDGERS` | `17280` | How many ledgers back the indexer starts from on boot. |
+| `CORS_ALLOWED_ORIGINS` | _(unset -- any origin)_ | Comma-separated list of allowed origins; unset or `*` means any origin. |
+| `RUST_LOG` | `info` | Log filter for the service (e.g. `debug`, `info`, `warn`). |
