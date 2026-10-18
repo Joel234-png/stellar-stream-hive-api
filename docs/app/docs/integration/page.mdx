@@ -83,6 +83,59 @@ const client = new StreamHiveClient("http://localhost:8080");
 const myStreams = await client.getStreamsByRecipient("GABC...XYZ");
 ```
 
+### Fetching every page
+
+List endpoints are paginated with `limit` and `offset` query parameters and
+report the total number of matching rows in the `X-Total-Count` response
+header. A common need is "all streams for an address", which means walking
+every page. This helper follows `X-Total-Count` with `limit=200`, increasing
+`offset` until every item has been collected, and throws on a non-OK response
+using the same error shape as the `get` helper above:
+
+```typescript
+async function fetchAll<T>(path: string): Promise<T[]> {
+  const limit = 200;
+  const items: T[] = [];
+  let offset = 0;
+
+  while (true) {
+    const separator = path.includes("?") ? "&" : "?";
+    const res = await fetch(`${client["baseUrl"]}${path}${separator}limit=${limit}&offset=${offset}`);
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      throw new Error(`${res.status} ${body.error ?? "unknown_error"}: ${body.message ?? res.statusText}`);
+    }
+
+    const page = (await res.json()) as T[];
+    items.push(...page);
+
+    const totalHeader = res.headers.get("X-Total-Count");
+    const total = totalHeader === null ? null : Number(totalHeader);
+    offset += page.length;
+
+    // Stop when the server reports we've seen everything, or when a short
+    // page tells us there is nothing left to fetch.
+    if (page.length < limit) break;
+    if (total !== null && offset >= total) break;
+  }
+
+  return items;
+}
+
+// Example: every stream paying a given recipient, across all pages.
+const allForRecipient = await fetchAll<StreamView>(
+  `/recipients/${encodeURIComponent("GABC...XYZ")}`,
+);
+```
+
+<CalloutBox variant="info" title="Reading X-Total-Count in the browser">
+  Browsers only expose a response header to JavaScript if the server lists it
+  in `Access-Control-Expose-Headers`. The API already sets
+  `Access-Control-Expose-Headers: X-Total-Count`, so `res.headers.get("X-Total-Count")`
+  works from a browser origin. If you proxy the API through your own backend,
+  make sure that proxy forwards the header too.
+</CalloutBox>
+
 <CalloutBox variant="warning" title="Don't do arithmetic on these fields as numbers">
   Every amount field above is typed `string`, not `number`, on purpose --
   see [API Overview: response conventions](/docs/api/overview#response-conventions).
@@ -140,6 +193,37 @@ const streamed = streamedAmount(
 );
 console.log(streamed); // 15000000000n
 ```
+
+### Converting stroops to a decimal string
+
+Amounts come back as integer strings in stroops (7 decimal places for XLM).
+To display them, convert to `bigint` and format with integer division and
+modulo -- never `Number` or floating point. This helper uses floor semantics,
+so any fractional stroop below the requested precision is truncated rather
+than rounded:
+
+```typescript
+function formatUnits(amount: bigint, decimals = 7): string {
+  const negative = amount < 0n;
+  const abs = negative ? -amount : amount;
+  const base = 10n ** BigInt(decimals);
+  const whole = abs / base;
+  const fraction = abs % base;
+  const fractionStr = fraction.toString().padStart(decimals, "0");
+  const sign = negative ? "-" : "";
+  return decimals === 0 ? `${sign}${whole}` : `${sign}${whole}.${fractionStr}`;
+}
+
+// Test-style examples:
+console.log(formatUnits(30_000_000_000n)); // "3000.0000000"
+console.log(formatUnits(1n));              // "0.0000001"
+console.log(formatUnits(12_345_678n, 7));  // "1.2345678"
+console.log(formatUnits(1_500_000n, 6));   // "1.500000"
+```
+
+For why 7 decimals and how the contract's integer math maps to displayed
+amounts, see the worked example in
+[Streaming Math](/docs/concepts/streaming-math).
 
 You need the current ledger sequence to evaluate this yourself; fetch it from
 Horizon directly (`GET {horizon}/` returns `history_latest_ledger`) or from
