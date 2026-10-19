@@ -73,6 +73,34 @@ curl -i "http://localhost:8080/streams?status=active&limit=20&offset=40"
 # x-total-count: 137
 ```
 
+### Post-processing with `jq`
+
+The response body is a plain JSON array, so `jq` can filter and reshape it
+without any extra tooling:
+
+```bash
+# 1. How many active streams came back on this page?
+curl -s "http://localhost:8080/streams?status=active&limit=20" | jq 'length'
+
+# 2. Just the ids, one per line
+curl -s "http://localhost:8080/streams?status=active&limit=20" | jq -r '.[].id'
+
+# 3. Total withdrawable across the page, summed as decimal strings
+curl -s "http://localhost:8080/streams?status=active&limit=20" \
+  | jq -r '[.[].withdrawable_amount] | reduce .[] as $s (0; . + ($s | tonumber))'
+```
+
+<CalloutBox variant="warning" title="Amounts are strings -- don't cast them blindly">
+  Every amount field (`total_amount`, `withdrawn`, `streamed_amount`,
+  `withdrawable_amount`) is a stringified `i128`. `jq`'s `tonumber` converts
+  to an IEEE-754 double, which silently loses precision above 2<sup>53</sup>
+  -- so a naive `jq '[.[].withdrawable_amount | tonumber] | add'` can return a
+  wrong total for large amounts. For anything beyond a quick eyeball, sum the
+  strings with a decimal/BigInt library in your own code (see the
+  [Integration Guide](/docs/integration#querying-the-api)) instead of casting
+  in `jq`.
+</CalloutBox>
+
 ### Effective status
 
 The indexer only observes three on-chain events (`create`, `withdraw`,
