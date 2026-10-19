@@ -5,3 +5,64 @@
 html {
   scroll-behavior: smooth;
 }
+
+/*
+ * Syntax colours for code blocks (rehype-highlight). CodeBlock always renders on
+ * a dark background (slate-950), so these are tuned for dark and stay readable
+ * in light mode too; they do not switch with the theme.
+ */
+.hljs-comment,
+.hljs-quote {
+  color: #64748b;
+  font-style: italic;
+}
+
+.hljs-keyword,
+.hljs-selector-tag,
+.hljs-literal,
+.hljs-doctag {
+  color: #c084fc;
+}
+
+.hljs-string,
+.hljs-attr-value,
+.hljs-template-variable,
+.hljs-addition {
+  color: #86efac;
+}
+
+.hljs-number,
+.hljs-symbol,
+.hljs-bullet,
+.hljs-meta .hljs-string {
+  color: #fdba74;
+}
+
+.hljs-title,
+.hljs-title.function_,
+.hljs-section,
+.hljs-name {
+  color: #7dd3fc;
+}
+
+.hljs-attr,
+.hljs-variable,
+.hljs-property,
+.hljs-params {
+  color: #fde68a;
+}
+
+.hljs-built_in,
+.hljs-type,
+.hljs-class .hljs-title {
+  color: #f9a8d4;
+}
+
+.hljs-meta,
+.hljs-tag {
+  color: #94a3b8;
+}
+
+.hljs-deletion {
+  color: #fca5a5;
+}
