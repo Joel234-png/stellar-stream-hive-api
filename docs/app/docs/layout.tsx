@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 
 import Sidebar from "@/components/Sidebar";
+import Toc from "@/components/Toc";
 
 export default function DocsLayout({ children }: { children: ReactNode }) {
   return (
@@ -11,6 +12,7 @@ export default function DocsLayout({ children }: { children: ReactNode }) {
           {children}
         </article>
       </main>
+      <Toc />
     </div>
   );
 }
