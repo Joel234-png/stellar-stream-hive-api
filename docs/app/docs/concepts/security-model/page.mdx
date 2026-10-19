@@ -150,3 +150,17 @@ of that same transaction's atomic execution.
   vector for unauthorized fund movement even if the indexer process itself
   were fully compromised.
 </CalloutBox>
+
+## State archival
+
+Soroban charges for ledger storage through a time-to-live (TTL), measured in
+ledgers. When the contracts write an entry, they extend its TTL to 241,920
+ledgers, about 14 days at roughly 5 seconds per ledger. An entry that goes
+untouched for longer than its TTL can be archived by the network. An archived
+entry is not deleted, but the contract cannot read it until it is restored.
+
+- **What is bumped:** the entries a contract writes. Each write extends that
+  entry's TTL.
+- **Where to look:** the TTL logic is in each contract's `storage.rs`. The
+  Stream contract lives in
+  [stellar-stream-hive-contract](https://github.com/Stellar-Hive/stellar-stream-hive-contract).

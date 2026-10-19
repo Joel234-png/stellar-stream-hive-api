@@ -6,15 +6,21 @@ html {
   scroll-behavior: smooth;
 }
 
-/* Heading permalinks: hidden until the heading is hovered or the link is focused. */
-.heading-anchor {
-  margin-left: 0.4em;
-  text-decoration: none;
-  opacity: 0;
+/* Wide tables: sticky header and zebra rows, inside the scroll container. */
+table thead th {
+  position: sticky;
+  top: 0;
+  background: #ffffff;
 }
 
-h2:hover > .heading-anchor,
-h3:hover > .heading-anchor,
-.heading-anchor:focus-visible {
-  opacity: 1;
+table tbody tr:nth-child(even) {
+  background: #f8fafc;
+}
+
+.dark table thead th {
+  background: #020617;
+}
+
+.dark table tbody tr:nth-child(even) {
+  background: rgb(15 23 42 / 0.5);
 }

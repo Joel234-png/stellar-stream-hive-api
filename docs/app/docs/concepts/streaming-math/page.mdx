@@ -36,6 +36,66 @@ this platform's clock. Every formula below is expressed in ledgers, not
 wall-clock time, because ledgers are what the contract can actually read
 (`env.ledger().sequence()`) and agree on deterministically.
 
+## Units and decimals
+
+Every amount on this platform is an `i128` in a token's smallest unit. The
+formulas on this page never see a decimal point, and neither the Stream
+contract nor the API reads a token's decimals: they store and compute on the
+raw integer. The caller is responsible for scaling in and out.
+
+How many decimal places a token has is a property of that token, not of the
+platform. Stellar's native XLM has 7 decimals, which is why the worked example
+below uses 1 XLM = 10,000,000 stroops. Other SEP-41 tokens can use any number
+of decimals, and each token reports its own value through its `decimals()`
+function. Always scale by that token's own `decimals()`:
+
+```text
+smallest_units = display_amount * 10^decimals
+display_amount = smallest_units / 10^decimals
+```
+
+Take 1,000 display units of two different tokens:
+
+| Token   | `decimals()` | 1,000 display units, in smallest units |
+|---------|--------------|----------------------------------------|
+| Token A | 7            | 1,000 * 10^7 = 10,000,000,000          |
+| Token B | 6            | 1,000 * 10^6 = 1,000,000,000           |
+
+The same integer means different amounts under different decimals.
+`10,000,000,000` smallest units is 1,000 units of Token A but 10,000 units of
+Token B, a 10x difference. Reading a 7-decimal amount as a 6-decimal one (or
+the reverse) therefore over- or under-pays by a factor of 10.
+
+<CalloutBox variant="warning" title="Never assume 7 decimals">
+  Do not hard-code `7` (or any other value) when converting amounts. Read
+  `decimals()` from the token contract you are streaming, and scale with that
+  value every time you convert between display units and smallest units.
+</CalloutBox>
+
+## Converting dates to ledgers
+
+Streams are defined in ledger sequence numbers, but people think in dates.
+Ledgers close about every 5 seconds, so a duration in seconds converts to
+ledgers with:
+
+```text
+ledgers = seconds / 5
+```
+
+For example, one day is 86,400 seconds, so one day is `86,400 / 5 = 17,280`
+ledgers. Thirty days is `30 * 17,280 = 518,400` ledgers, the same figure used
+in the worked example below. To turn a future date into a ledger, take the
+seconds from now until that date, divide by 5, and add the result to the
+current ledger sequence.
+
+<CalloutBox variant="warning" title="This conversion is an estimate">
+  Ledger close times are not exactly 5 seconds and vary with network
+  conditions, so `seconds / 5` can drift from the real close time over long
+  schedules. Ledger sequence numbers are the authoritative clock for a stream.
+  Treat any date-to-ledger conversion as an approximation for planning and
+  display.
+</CalloutBox>
+
 ## Deriving the formula
 
 We want a function `streamed_amount(current_ledger)` that is 0 before the stream
@@ -207,6 +267,86 @@ cliff does not reset the accrual clock to zero and start counting from the
 cliff. A one-year stream with a 90-day cliff makes 90 days of value available
 all at once the moment the cliff passes, exactly matching what a
 continuously-vesting schedule would have accrued by that point.
+
+The chart below plots the one-year, 90-day-cliff example from this section. The
+dashed line is what has accrued. The solid line is what the recipient can
+withdraw. The solid line stays at zero until the cliff, then jumps up to the
+accrued amount.
+
+<figure>
+  <svg
+    viewBox="0 0 720 390"
+    role="img"
+    aria-labelledby="cliff-chart-title"
+    style={{ maxWidth: "100%", height: "auto" }}
+  >
+    <title id="cliff-chart-title">
+      Line chart of a one-year stream with a 90-day cliff. Accrued amount rises
+      in a straight line from 0% at the start to 100% at day 365. Withdrawable
+      amount is 0% until day 90, then jumps to about 25% at the cliff, and then
+      rises in parallel to the accrued line, reaching 100% at day 365.
+    </title>
+
+    {/* Axes */}
+    <g stroke="currentColor" strokeWidth="1.5">
+      <line x1="70" y1="40" x2="70" y2="330" />
+      <line x1="70" y1="330" x2="680" y2="330" />
+    </g>
+
+    {/* Cliff and 25% guides */}
+    <g stroke="currentColor" strokeOpacity="0.35" strokeDasharray="4 4">
+      <line x1="220.4" y1="40" x2="220.4" y2="330" />
+      <line x1="70" y1="258.5" x2="220.4" y2="258.5" />
+    </g>
+
+    {/* Accrued (streamed) line */}
+    <line
+      x1="70"
+      y1="330"
+      x2="680"
+      y2="40"
+      stroke="currentColor"
+      strokeOpacity="0.6"
+      strokeWidth="2"
+      strokeDasharray="6 5"
+    />
+
+    {/* Withdrawable line: flat at zero, jumps at the cliff, then tracks accrual */}
+    <path
+      d="M70 330 L220.4 330 L220.4 258.5 L680 40"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="3"
+    />
+
+    {/* Legend */}
+    <g stroke="currentColor" strokeWidth="2">
+      <line x1="380" y1="52" x2="410" y2="52" strokeOpacity="0.6" strokeDasharray="6 5" />
+      <line x1="380" y1="74" x2="410" y2="74" strokeWidth="3" />
+    </g>
+    <g fill="currentColor" fontSize="12">
+      <text x="418" y="56">accrued</text>
+      <text x="418" y="78">withdrawable</text>
+      <text x="232" y="300">about 25% unlocks at the cliff</text>
+    </g>
+
+    {/* Tick labels */}
+    <g fill="currentColor" fontSize="12">
+      <text x="62" y="44" textAnchor="end">100%</text>
+      <text x="62" y="262" textAnchor="end">25%</text>
+      <text x="62" y="334" textAnchor="end">0%</text>
+      <text x="70" y="348" textAnchor="middle">0</text>
+      <text x="220.4" y="348" textAnchor="middle">day 90: cliff</text>
+      <text x="680" y="348" textAnchor="middle">day 365: end</text>
+      <text x="375" y="372" textAnchor="middle">time since start (1-year stream)</text>
+    </g>
+  </svg>
+  <figcaption>
+    A one-year stream with a 90-day cliff. Accrual is linear throughout, but
+    nothing is withdrawable until the cliff, which then releases the value
+    accrued so far in one step.
+  </figcaption>
+</figure>
 
 ## What happens on cancel
 
