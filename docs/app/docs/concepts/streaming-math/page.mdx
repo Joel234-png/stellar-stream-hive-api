@@ -208,6 +208,86 @@ cliff. A one-year stream with a 90-day cliff makes 90 days of value available
 all at once the moment the cliff passes, exactly matching what a
 continuously-vesting schedule would have accrued by that point.
 
+The chart below plots the one-year, 90-day-cliff example from this section. The
+dashed line is what has accrued. The solid line is what the recipient can
+withdraw. The solid line stays at zero until the cliff, then jumps up to the
+accrued amount.
+
+<figure>
+  <svg
+    viewBox="0 0 720 390"
+    role="img"
+    aria-labelledby="cliff-chart-title"
+    style={{ maxWidth: "100%", height: "auto" }}
+  >
+    <title id="cliff-chart-title">
+      Line chart of a one-year stream with a 90-day cliff. Accrued amount rises
+      in a straight line from 0% at the start to 100% at day 365. Withdrawable
+      amount is 0% until day 90, then jumps to about 25% at the cliff, and then
+      rises in parallel to the accrued line, reaching 100% at day 365.
+    </title>
+
+    {/* Axes */}
+    <g stroke="currentColor" strokeWidth="1.5">
+      <line x1="70" y1="40" x2="70" y2="330" />
+      <line x1="70" y1="330" x2="680" y2="330" />
+    </g>
+
+    {/* Cliff and 25% guides */}
+    <g stroke="currentColor" strokeOpacity="0.35" strokeDasharray="4 4">
+      <line x1="220.4" y1="40" x2="220.4" y2="330" />
+      <line x1="70" y1="258.5" x2="220.4" y2="258.5" />
+    </g>
+
+    {/* Accrued (streamed) line */}
+    <line
+      x1="70"
+      y1="330"
+      x2="680"
+      y2="40"
+      stroke="currentColor"
+      strokeOpacity="0.6"
+      strokeWidth="2"
+      strokeDasharray="6 5"
+    />
+
+    {/* Withdrawable line: flat at zero, jumps at the cliff, then tracks accrual */}
+    <path
+      d="M70 330 L220.4 330 L220.4 258.5 L680 40"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="3"
+    />
+
+    {/* Legend */}
+    <g stroke="currentColor" strokeWidth="2">
+      <line x1="380" y1="52" x2="410" y2="52" strokeOpacity="0.6" strokeDasharray="6 5" />
+      <line x1="380" y1="74" x2="410" y2="74" strokeWidth="3" />
+    </g>
+    <g fill="currentColor" fontSize="12">
+      <text x="418" y="56">accrued</text>
+      <text x="418" y="78">withdrawable</text>
+      <text x="232" y="300">about 25% unlocks at the cliff</text>
+    </g>
+
+    {/* Tick labels */}
+    <g fill="currentColor" fontSize="12">
+      <text x="62" y="44" textAnchor="end">100%</text>
+      <text x="62" y="262" textAnchor="end">25%</text>
+      <text x="62" y="334" textAnchor="end">0%</text>
+      <text x="70" y="348" textAnchor="middle">0</text>
+      <text x="220.4" y="348" textAnchor="middle">day 90: cliff</text>
+      <text x="680" y="348" textAnchor="middle">day 365: end</text>
+      <text x="375" y="372" textAnchor="middle">time since start (1-year stream)</text>
+    </g>
+  </svg>
+  <figcaption>
+    A one-year stream with a 90-day cliff. Accrual is linear throughout, but
+    nothing is withdrawable until the cliff, which then releases the value
+    accrued so far in one step.
+  </figcaption>
+</figure>
+
 ## What happens on cancel
 
 If a stream is `cancellable` (set at creation and immutable thereafter), the
