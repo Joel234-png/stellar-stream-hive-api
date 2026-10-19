@@ -14,7 +14,7 @@ export function useMDXComponents(components: MDXComponents): MDXComponents {
   return {
     pre: (props) => <CodeBlock {...props} />,
     table: (props) => (
-      <div className="my-6 overflow-x-auto">
+      <div className="my-6 max-h-[70vh] overflow-auto">
         <table {...props} />
       </div>
     ),
