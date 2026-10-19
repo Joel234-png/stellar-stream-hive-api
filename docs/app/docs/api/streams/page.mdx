@@ -73,6 +73,34 @@ curl -i "http://localhost:8080/streams?status=active&limit=20&offset=40"
 # x-total-count: 137
 ```
 
+### Post-processing with `jq`
+
+The response body is a plain JSON array, so `jq` can filter and reshape it
+without any extra tooling:
+
+```bash
+# 1. How many active streams came back on this page?
+curl -s "http://localhost:8080/streams?status=active&limit=20" | jq 'length'
+
+# 2. Just the ids, one per line
+curl -s "http://localhost:8080/streams?status=active&limit=20" | jq -r '.[].id'
+
+# 3. Total withdrawable across the page, summed as decimal strings
+curl -s "http://localhost:8080/streams?status=active&limit=20" \
+  | jq -r '[.[].withdrawable_amount] | reduce .[] as $s (0; . + ($s | tonumber))'
+```
+
+<CalloutBox variant="warning" title="Amounts are strings -- don't cast them blindly">
+  Every amount field (`total_amount`, `withdrawn`, `streamed_amount`,
+  `withdrawable_amount`) is a stringified `i128`. `jq`'s `tonumber` converts
+  to an IEEE-754 double, which silently loses precision above 2<sup>53</sup>
+  -- so a naive `jq '[.[].withdrawable_amount | tonumber] | add'` can return a
+  wrong total for large amounts. For anything beyond a quick eyeball, sum the
+  strings with a decimal/BigInt library in your own code (see the
+  [Integration Guide](/docs/integration#querying-the-api)) instead of casting
+  in `jq`.
+</CalloutBox>
+
 ### Effective status
 
 The indexer only observes three on-chain events (`create`, `withdraw`,
@@ -114,8 +142,28 @@ An empty array (`[]`) is a valid response -- it means either no streams have
 been created yet, or `STREAM_CONTRACT_ID` isn't configured yet (see
 [Getting Started: deployed contract addresses](/docs/getting-started#deployed-contract-addresses)).
 
-**Errors:** `500 internal_error` only if computing a stream's live view fails
-unexpectedly (e.g. arithmetic overflow) -- not expected in normal operation.
+**Errors:**
+
+- `400 bad_request` -- an invalid query parameter:
+  - `limit` of `0` or greater than `200`
+  - an unknown `status` value
+  - an unknown `sort` value
+  - an unknown `order` value
+- `500 internal_error` only if computing a stream's live view fails
+  unexpectedly (e.g. arithmetic overflow) -- not expected in normal operation.
+
+Example `400` response body:
+
+```bash
+curl -i "http://localhost:8080/streams?limit=0"
+```
+
+```json
+{
+  "error": "bad_request",
+  "message": "limit must be between 1 and 200"
+}
+```
 
 ## `GET /streams/:id`
 
@@ -162,7 +210,7 @@ curl http://localhost:8080/streams/0
 
 | Parameter | Location | Type | Description |
 |---|---|---|---|
-| `address` | path | string | A Stellar `G...` account strkey. |
+| `address` | path | string | A Stellar strkey: either a `G...` account or a `C...` contract address. |
 
 ```bash
 curl http://localhost:8080/senders/GABC...XYZ
@@ -173,8 +221,20 @@ Returns a JSON array of [stream view](#stream-view-shape) objects where
 pre-filtered. An address that has never sent a stream returns `[]`, not a
 `404` -- there's nothing invalid about an address with zero streams.
 
-**Errors:** `400 bad_request` if `address` is empty (e.g. a malformed path
-like `/senders/`).
+**Errors:** `400 bad_request` if `address` is not a well-formed strkey --
+either a `G...` account or a `C...` contract address. This includes an empty
+address (e.g. a malformed path like `/senders/`) and any malformed value.
+
+```bash
+curl -i http://localhost:8080/senders/not-a-strkey
+```
+
+```json
+{
+  "error": "bad_request",
+  "message": "invalid address"
+}
+```
 
 ## `GET /recipients/:address`
 
@@ -187,7 +247,20 @@ on `recipient` instead of `sender`.
 curl http://localhost:8080/recipients/GDEF...UVW
 ```
 
-**Errors:** `400 bad_request` if `address` is empty.
+**Errors:** `400 bad_request` if `address` is not a well-formed strkey --
+either a `G...` account or a `C...` contract address. This includes an empty
+address and any malformed value.
+
+```bash
+curl -i http://localhost:8080/recipients/not-a-strkey
+```
+
+```json
+{
+  "error": "bad_request",
+  "message": "invalid address"
+}
+```
 
 <CalloutBox variant="success" title="TypeScript example">
   See [Integration Guide](/docs/integration#querying-the-api) for a typed

@@ -34,6 +34,31 @@ curl http://localhost:8080/stats
 | `total_withdrawn` | string (i128) | Sum of `withdrawn` across every stream. |
 | `total_value_locked` | string (i128) | Funds the vault still holds for streams: `total_amount - withdrawn` for pending, active and completed streams, and only the recipient's unclaimed share (`streamed_now - withdrawn`) for cancelled ones, since the remainder was refunded to the sender. |
 
+### Worked example: `total_value_locked`
+
+Two streams, one active and one cancelled:
+
+| Stream | Status | `total_amount` | `withdrawn` | `streamed_amount` | Contributes to `total_value_locked` |
+|---|---|---|---|---|---|
+| A | active | 1000000000 | 300000000 | 600000000 | 700000000 (`total_amount - withdrawn`) |
+| B | cancelled | 500000000 | 100000000 | 200000000 (at cancel) | 100000000 (`streamed_now - withdrawn`) |
+| **Total** | | **1000 deposited** | **300 withdrawn** | | **700 locked** |
+
+Stream A is still active, so the vault holds its entire unwithdrawn balance:
+`1000000000 - 300000000 = 700000000`.
+
+Stream B was cancelled after the recipient had streamed `200000000` and
+withdrawn `100000000`. Cancelling refunds the sender everything that had not
+yet streamed (`total_amount - streamed_now`), so the vault no longer holds
+that portion. Only the recipient's unclaimed share remains locked:
+`200000000 - 100000000 = 100000000`.
+
+Adding the two contributions gives `700000000 + 100000000 = 800000000` in
+raw units -- i.e. 1000 deposited, 300 withdrawn, 700 locked once the
+cancelled stream's refunded remainder is excluded. This is the same
+accounting the `stats_report_value_locked_net_of_withdrawals_and_refunds`
+test exercises.
+
 <CalloutBox variant="info" title="active_streams counts only Active, not Pending">
   This differs slightly from the Stream contract's own notion of "still
   accruing," which treats `Pending` and `Active` as equivalent for some
@@ -62,10 +87,25 @@ amount computation in this API (see
 ## Comparison to the Registry contract's `get_stats`
 
 The [Registry contract](/docs/contracts/registry#get_stats) exposes an
-on-chain `get_stats` function returning the same four fields. The two are
-computed independently -- the Registry from its own on-chain bookkeeping, this
-API from indexed `create`/`withdraw`/`cancel` events -- and should
-always agree, modulo the indexer's poll interval (10 seconds by default). If
-they ever diverge for more than a poll cycle or two, that's a bug worth
-reporting: either the indexer missed/misdecoded an event, or the Registry's
-bookkeeping and the Stream contract's actual behavior have drifted apart.
+on-chain `get_stats` function, but it does not return the same field set as
+this endpoint. `/stats` returns five fields -- `total_streams`,
+`active_streams`, `total_streamed`, `total_withdrawn` and
+`total_value_locked` -- while the Registry's `get_stats` reports its own
+bookkeeping totals. The two are computed independently: the Registry from its
+own on-chain state, this API from indexed `create`/`withdraw`/`cancel` events.
+
+Only two fields are directly comparable:
+
+| Field | Comparable? | Why |
+|---|---|---|
+| `total_streams` | Yes | Both count every stream ever created. |
+| `total_withdrawn` | Yes | Both sum the amounts recipients have withdrawn. |
+| `total_streamed` | No | The Registry reports the cumulative committed amount, while this API reports live accrual at the indexer's latest known ledger. These are different quantities and will legitimately differ. |
+| `active_streams` | No | The Registry's `get_stats` has no equivalent field. |
+| `total_value_locked` | No | The Registry's `get_stats` has no equivalent field. |
+
+For the comparable fields, small differences are expected within the
+indexer's poll interval (10 seconds by default) as newly indexed events are
+picked up. Differences in `total_streamed`, `active_streams` or
+`total_value_locked` are not a sign of a bug -- they measure different things.
+=======

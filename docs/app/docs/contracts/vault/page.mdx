@@ -144,14 +144,23 @@ contract's own account.
 
 ## Events emitted
 
-The Vault contract does not emit its own lifecycle events for indexing
-purposes -- `stellar-stream-hive-api` indexes stream lifecycle exclusively
-through the Stream contract's `create`/`withdraw`/`cancel` events
-(see [Stream contract: events emitted](/docs/contracts/stream#events-emitted)),
-since those already carry every figure ( amounts, ids) the indexer needs.
-Token transfers `release`/`refund` trigger do still surface as standard SEP-41
-`transfer` events on the underlying token contract, visible to any generic
-Horizon/Soroban RPC event watcher.
+The Vault emits a typed event for every custody movement, defined in its
+`events.rs`. Each event's name is its first topic `Symbol`, and `stream_id` is
+the second topic on the events that carry one:
+
+| Event | Topics | Data |
+|---|---|---|
+| `deposit` | `[Symbol("deposit"), U64(stream_id)]` | `Vec[Address(from), Address(token), I128(amount)]` |
+| `release` | `[Symbol("release"), U64(stream_id)]` | `Vec[Address(to), Address(token), I128(amount)]` |
+| `refund` | `[Symbol("refund"), U64(stream_id)]` | `Vec[Address(to), Address(token), I128(amount)]` |
+| `set_stream_contract` | `[Symbol("set_stream_contract")]` | `Address(new_contract)` |
+
+The Stream contract's `create`/`withdraw`/`cancel` events remain the lifecycle
+feed that `stellar-stream-hive-api` indexes, since they already carry every
+figure (amounts, ids) the indexer needs. The consolidated table lives in
+[Stream contract: events emitted](/docs/contracts/stream#events-emitted).
+Token transfers made by `release`/`refund` also surface as standard SEP-41
+`transfer` events on the underlying token contract.
 
 ## Security notes
 
