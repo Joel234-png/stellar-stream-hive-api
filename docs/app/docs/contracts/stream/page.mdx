@@ -53,7 +53,7 @@ pub struct Stream {
 | `end_ledger` | `u32` | Ledger sequence the stream is fully vested at. Must be `> start_ledger`. |
 | `cliff_ledger` | `u32` | Ledger sequence before which nothing is withdrawable. `>= start_ledger`; equals `start_ledger` when there is no cliff. |
 | `cancellable` | `bool` | Whether `sender` may call `cancel_stream`. Fixed at creation. |
-| `status` | `StreamStatus` | Current lifecycle state -- see below. |
+| `status` | `StreamStatus` | Stored lifecycle state. Only `Cancelled` is written after creation; use `get_status` for the live state. See [Lifecycle](#lifecycle). |
 | `created_at` | `u32` | Ledger sequence the stream was created at. |
 | `cancelled_at_ledger` | `u32` | Ledger sequence of cancellation, `0` if never cancelled. Accrual is frozen at this ledger so later ledgers can never inflate what the recipient is owed. |
 
@@ -77,6 +77,62 @@ pub enum StreamStatus {
 `Pending` and `Active` are the only states `streamed_amount` treats as "still
 accruing" for the purposes of the indexer's `is_active` check; `Completed` and
 `Cancelled` are both terminal.
+
+#### Lifecycle
+
+<div style={{ margin: "1.5rem auto", maxWidth: "36rem" }}>
+  <svg
+    role="img"
+    aria-labelledby="stream-lifecycle-title"
+    viewBox="0 0 560 220"
+    style={{ width: "100%", height: "auto" }}
+  >
+    <title id="stream-lifecycle-title">
+      Stream lifecycle. A stream moves from Pending to Active at start_ledger and from Active to Completed at end_ledger. A sender can move a cancellable stream from Pending or Active to Cancelled before end_ledger. Completed and Cancelled are terminal.
+    </title>
+    <defs>
+      <marker id="stream-lifecycle-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+        <path d="M0,0 L10,5 L0,10 z" fill="currentColor" />
+      </marker>
+    </defs>
+    <g fill="none" stroke="currentColor" strokeWidth="1.5">
+      <rect x="20" y="40" width="130" height="56" rx="8" />
+      <rect x="215" y="40" width="130" height="56" rx="8" />
+      <rect x="410" y="40" width="130" height="56" rx="8" />
+      <rect x="215" y="150" width="130" height="56" rx="8" />
+      <line x1="150" y1="68" x2="215" y2="68" markerEnd="url(#stream-lifecycle-arrow)" />
+      <line x1="345" y1="68" x2="410" y2="68" markerEnd="url(#stream-lifecycle-arrow)" />
+      <path d="M85 96 V178 H215" markerEnd="url(#stream-lifecycle-arrow)" />
+      <line x1="280" y1="96" x2="280" y2="150" markerEnd="url(#stream-lifecycle-arrow)" />
+    </g>
+    <g fill="currentColor" textAnchor="middle">
+      <text x="85" y="66" fontSize="15">Pending</text>
+      <text x="85" y="84" fontSize="11">before start_ledger</text>
+      <text x="280" y="66" fontSize="15">Active</text>
+      <text x="280" y="84" fontSize="11">start to end_ledger</text>
+      <text x="475" y="66" fontSize="15">Completed</text>
+      <text x="475" y="84" fontSize="11">at or after end_ledger</text>
+      <text x="280" y="182" fontSize="15">Cancelled</text>
+      <text x="280" y="200" fontSize="11">sender cancels</text>
+      <text x="182" y="30" fontSize="11">start_ledger</text>
+      <text x="377" y="30" fontSize="11">end_ledger</text>
+      <text x="92" y="140" fontSize="11" textAnchor="start">cancel</text>
+      <text x="288" y="128" fontSize="11" textAnchor="start">cancel</text>
+    </g>
+  </svg>
+</div>
+
+Solid arrows are the only transitions. `Pending` to `Active` and `Active` to
+`Completed` are derived from the current ledger, so no transaction is needed for
+either. Only `Cancelled` is ever written to storage after creation.
+
+- **Pending or Active to Cancelled:** `cancel_stream` on a stream created with
+  `cancellable` set to `true`, before `end_ledger`.
+- **Completed** and **Cancelled** are terminal. `cancel_stream` on either
+  returns `AlreadyFinalized`.
+- The `status` field on a `Stream` returned by `get_stream` is the stored value:
+  `Pending` from creation until a cancel. Use [`get_status`](#get_status) for the
+  live state.
 
 ### `StreamError`
 
@@ -135,9 +191,10 @@ pub fn create_stream(
 ```
 
 Validates the schedule, calls `vault.deposit` to pull `total_amount` of
-`token` from `sender` into the Vault, stores a new `Stream` in `Pending` (or
-`Active`, if `start_ledger` has already passed) status, registers it with the
-Registry, and returns the new stream's `id`.
+`token` from `sender` into the Vault, stores a new `Stream` with `status` set to
+`Pending`, registers it with the Registry, and returns the new stream's `id`.
+Accrual moves the stream to `Active` from `start_ledger` onward; see
+[Lifecycle](#lifecycle).
 
 - **Auth:** `sender.require_auth()`.
 - **Returns:** the new `u64` stream id.
@@ -233,9 +290,9 @@ pub fn withdraw(env: Env, recipient: Address, stream_id: u64, amount: i128) -> R
 ```
 
 Withdraws exactly `amount` (which must be `<= withdrawable_amount`) to
-`recipient`. Updates `withdrawn`, transitions `status` to `Completed` if this
-withdrawal exhausts a stream that has reached `end_ledger`, and calls
-`vault.release(stream_id, recipient, amount)`.
+`recipient`. Updates `withdrawn` and calls `vault.release(stream_id, recipient, amount)`.
+It does not write `status`: a stream past `end_ledger` reads as `Completed`
+through `get_status` without any write (see [Lifecycle](#lifecycle)).
 
 - **Auth:** `recipient.require_auth()`.
 - **Errors:** `InvalidAmount`, `StreamNotFound`, `Unauthorized` (not the recipient),
@@ -314,10 +371,10 @@ return the total -- prefer them for addresses with many streams.
 pub fn get_status(env: Env, stream_id: u64) -> StreamStatus
 ```
 
-Returns just the `StreamStatus`, recomputing `Pending -> Active -> Completed`
-transitions lazily based on the current ledger (so a stream whose
-`end_ledger` has passed reports `Completed` even if no one has called
-`withdraw` since then to persist that transition on-chain).
+Returns just the `StreamStatus`, derived from the current ledger (see
+[Lifecycle](#lifecycle)). A stream whose `end_ledger` has passed reports
+`Completed` with no transaction at all, because `Completed` is never written
+on-chain.
 
 - **Auth:** none (read-only).
 - **Errors:** `StreamNotFound`.
@@ -338,20 +395,40 @@ authorization from both the current and the new admin.
 
 ## Events emitted
 
-These are the events `stellar-stream-hive-api`'s indexer
-(`api/src/indexer/events.rs`) decodes from `result_meta_xdr`. See that module's
-doc comment for the canonical reference; reproduced here for convenience:
+All three contracts publish typed events. The table below is the consolidated
+reference for the Stream, Vault, and Registry contracts, taken from each
+contract's `events.rs`. Each event's name is its first topic `Symbol`. Events
+with a `#[topic]` field carry that field as a second topic (`U64`). Multi-field
+data is a `Vec` in declaration order; single-value data is the value itself.
 
-| Event | Topics | Data (`Vec`) |
-|---|---|---|
-| `create` | `[Symbol("create"), U64(id)]` | `[Address(sender), Address(recipient), Address(token), I128(total_amount), U32(start_ledger), U32(end_ledger), U32(cliff_ledger), Bool(cancellable)]` |
-| `withdraw` | `[Symbol("withdraw"), U64(id)]` | `[Address(recipient), I128(amount)]` |
-| `cancel` | `[Symbol("cancel"), U64(id)]` | `[Address(sender), I128(streamed_now), I128(remainder)]` |
-| `pause` / `unpause` | `[Symbol("pause")]` / `[Symbol("unpause")]` | `[Address(admin)]` |
-| `admin_transfer` | `[Symbol("admin_transfer")]` | `[Address(previous_admin), Address(new_admin)]` |
+| Contract | Event | Topics | Data |
+|---|---|---|---|
+| Stream | `create` | `[Symbol("create"), U64(stream_id)]` | `Vec[Address(sender), Address(recipient), Address(token), I128(total_amount), U32(start_ledger), U32(end_ledger), U32(cliff_ledger), Bool(cancellable)]` |
+| Stream | `withdraw` | `[Symbol("withdraw"), U64(stream_id)]` | `Vec[Address(recipient), I128(amount)]` |
+| Stream | `cancel` | `[Symbol("cancel"), U64(stream_id)]` | `Vec[Address(sender), I128(streamed_now), I128(remainder)]` |
+| Stream | `pause` | `[Symbol("pause")]` | `Vec[Address(admin)]` |
+| Stream | `unpause` | `[Symbol("unpause")]` | `Vec[Address(admin)]` |
+| Stream | `admin_transfer` | `[Symbol("admin_transfer")]` | `Vec[Address(previous_admin), Address(new_admin)]` |
+| Vault | `deposit` | `[Symbol("deposit"), U64(stream_id)]` | `Vec[Address(from), Address(token), I128(amount)]` |
+| Vault | `release` | `[Symbol("release"), U64(stream_id)]` | `Vec[Address(to), Address(token), I128(amount)]` |
+| Vault | `refund` | `[Symbol("refund"), U64(stream_id)]` | `Vec[Address(to), Address(token), I128(amount)]` |
+| Vault | `set_stream_contract` | `[Symbol("set_stream_contract")]` | `Address(new_contract)` |
+| Registry | `register` | `[Symbol("register"), U64(stream_id)]` | `I128(amount)` |
+| Registry | `update` | `[Symbol("update"), U64(stream_id)]` | `I128(withdrawn)` |
 
-The indexer only needs the first three; `cancel`'s `streamed_now` is what the
-recipient keeps (and may still withdraw, minus `withdrawn`).
+<CalloutBox variant="warning" title="`create` has two new trailing fields">
+  `create` now carries `cliff_ledger` and `cancellable` in its data `Vec`. This
+  is a breaking change for consumers that decode `create` by field count or
+  position: they must read the two extra trailing fields before they can
+  decode it.
+</CalloutBox>
+
+The indexer in `stellar-stream-hive-api` (`api/src/indexer/events.rs`) decodes
+only the Stream contract's `create`, `withdraw`, and `cancel` events, which it
+reads from Soroban RPC `getEvents` filtered to the Stream contract. Its module
+doc comment is the canonical reference for that wire format. `cancel`'s
+`streamed_now` is what the recipient keeps (and may still withdraw, minus
+`withdrawn`).
 
 ## CLI examples
 
