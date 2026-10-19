@@ -9,6 +9,13 @@ interface TocItem {
   level: 2 | 3;
 }
 
+// Heading text without the permalink "#" that rehype-autolink-headings adds.
+function headingText(heading: HTMLHeadingElement) {
+  const clone = heading.cloneNode(true) as HTMLElement;
+  clone.querySelector(".heading-anchor")?.remove();
+  return clone.textContent ?? "";
+}
+
 /**
  * "On this page" links built from the article's rendered h2/h3 headings.
  * Shown only at `xl` and up; the active entry follows the section in view.
@@ -25,7 +32,7 @@ export default function Toc() {
     setItems(
       headings.map((heading) => ({
         id: heading.id,
-        text: heading.textContent ?? "",
+        text: headingText(heading),
         level: heading.tagName === "H2" ? 2 : 3,
       })),
     );

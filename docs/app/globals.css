@@ -5,3 +5,16 @@
 html {
   scroll-behavior: smooth;
 }
+
+/* Heading permalinks: hidden until the heading is hovered or the link is focused. */
+.heading-anchor {
+  margin-left: 0.4em;
+  text-decoration: none;
+  opacity: 0;
+}
+
+h2:hover > .heading-anchor,
+h3:hover > .heading-anchor,
+.heading-anchor:focus-visible {
+  opacity: 1;
+}
