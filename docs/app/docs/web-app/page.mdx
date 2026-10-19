@@ -50,7 +50,7 @@ web app does is privileged or otherwise unavailable to you directly.
    - **Start** and **End** -- pick calendar dates/times; the app converts
      these to ledger sequence numbers internally by estimating from the
      current ledger and Stellar's ~5-second ledger close time (see
-     [Streaming Math](/docs/concepts/streaming-math#the-mental-model)).
+     [Converting dates to ledgers](/docs/concepts/streaming-math#converting-dates-to-ledgers)).
    - **Cliff** (optional) -- a date before which nothing is withdrawable, even
      though accrual has started. Leave blank for no cliff.
    - **Cancellable** -- whether you (the sender) can cancel this stream
@@ -61,6 +61,13 @@ web app does is privileged or otherwise unavailable to you directly.
    `create_stream` call together.
 4. Once confirmed, the new stream appears on your dashboard with status
    **Pending** (if its start time is in the future) or **Active**.
+
+<CalloutBox variant="warning" title="Dates are estimates, ledgers are exact">
+  The **Start**, **End**, and **Cliff** dates are converted to ledgers using
+  roughly 5 seconds per ledger. Real ledger close times vary, so the date you
+  picked and the moment the stream actually starts or ends can differ. The
+  on-chain schedule is the ledger numbers, not the calendar dates.
+</CalloutBox>
 
 ## Watching a balance accrue
 

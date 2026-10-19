@@ -146,12 +146,19 @@ Returns the ids of every stream currently in `Pending` or `Active` status.
 
 ## Events emitted
 
-The Registry contract does not emit its own events. It is a passive index fed
-entirely by the Stream contract's calls to `register_stream` and
-`update_stream`; anything worth indexing off-chain is already emitted by the
-Stream contract itself (see
-[Stream contract: events emitted](/docs/contracts/stream#events-emitted)),
-which is what `stellar-stream-hive-api` actually watches.
+The Registry emits a typed event each time it changes its index, defined in its
+`events.rs`. Each event's name is its first topic `Symbol`, and `stream_id` is
+the second topic:
+
+| Event | Topics | Data |
+|---|---|---|
+| `register` | `[Symbol("register"), U64(stream_id)]` | `I128(amount)` |
+| `update` | `[Symbol("update"), U64(stream_id)]` | `I128(withdrawn)` |
+
+These are single-value events: the data is the amount itself, not a `Vec`. The
+Stream contract's `create`/`withdraw`/`cancel` events remain the lifecycle feed
+that `stellar-stream-hive-api` indexes. The consolidated table lives in
+[Stream contract: events emitted](/docs/contracts/stream#events-emitted).
 
 ## Security notes
 

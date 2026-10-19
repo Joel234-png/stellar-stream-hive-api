@@ -127,6 +127,48 @@ That's the entire lifecycle. For the fund-safety reasoning behind why
 that holds the money is a separate contract from the one you just called, see
 [Security Model](/docs/concepts/security-model).
 
+### Variant: a stream with a cliff
+
+The quickstart above has no cliff, so the recipient can withdraw from the first
+ledger. To hold withdrawals back, set `cliff_ledger` between `start_ledger` and
+`end_ledger`. This example streams 100 XLM over 720 ledgers (about one hour)
+with a cliff at the halfway point, 360 ledgers (about 30 minutes) after the
+start:
+
+- `start_ledger` = `CURRENT_LEDGER`
+- `end_ledger` = `CURRENT_LEDGER + 720`
+- `cliff_ledger` = `CURRENT_LEDGER + 360`
+
+```bash
+stellar contract invoke \
+  --id <STREAM_CONTRACT_ID> \
+  --source sender \
+  --network testnet \
+  -- create_stream \
+  --sender "$(stellar keys address sender)" \
+  --recipient "$(stellar keys address recipient)" \
+  --token <XLM_SAC_CONTRACT_ID> \
+  --total_amount 1000000000 \
+  --start_ledger "$CURRENT_LEDGER" \
+  --end_ledger $((CURRENT_LEDGER + 720)) \
+  --cliff_ledger $((CURRENT_LEDGER + 360)) \
+  --cancellable true
+```
+
+Using `streamed_amount` and `withdrawable_amount` from
+[Streaming Math](/docs/concepts/streaming-math#cliff-behavior), with nothing
+withdrawn yet:
+
+| `current_ledger` | `streamed_amount` (stroops) | `withdrawable_amount` (stroops) |
+|---|---|---|
+| `CURRENT_LEDGER` (start) | `0` | `0` |
+| `CURRENT_LEDGER + 359` | `498_611_111` | `0` (one ledger before the cliff) |
+| `CURRENT_LEDGER + 360` (cliff) | `500_000_000` | `500_000_000` |
+| `CURRENT_LEDGER + 720` (end) | `1_000_000_000` | `1_000_000_000` |
+
+At the cliff, the recipient can withdraw the full 50 XLM accrued since the
+start, not just the portion that accrues after the cliff.
+
 ## Network guide
 
 | Network | Horizon | Soroban RPC | Notes |
@@ -137,6 +179,54 @@ that holds the money is a separate contract from the one you just called, see
 
 The API's indexer reads contract events from the Soroban RPC (`SOROBAN_RPC_URL`
 environment variable, default: testnet) -- see [`api/README.md`](https://github.com/Stellar-Hive/stellar-stream-hive-api/blob/main/api/README.md).
+
+## Troubleshooting: error codes
+
+When a contract call fails, the Stellar CLI prints the code as
+`Error(Contract, #N)`. Find the contract that made the call, then look up `N`
+below. Each table is copied from that contract's `error.rs` in
+[`stellar-stream-hive-contract`](https://github.com/Stellar-Hive/stellar-stream-hive-contract).
+
+### Stream contract (codes 1-13)
+
+| Code | Name | Meaning |
+|---|---|---|
+| 1 | `AlreadyInitialized` | `initialize` was called a second time. |
+| 2 | `NotInitialized` | A function ran before `initialize`. |
+| 3 | `Unauthorized` | The caller is not the stream's sender or recipient. |
+| 4 | `InvalidAmount` | An amount was zero or negative. |
+| 5 | `InvalidTimeRange` | `end_ledger` was not after `start_ledger`. |
+| 6 | `InvalidCliff` | `cliff_ledger` was outside `[start_ledger, end_ledger]`. |
+| 7 | `StreamNotFound` | No stream exists with that id. |
+| 8 | `BeforeCliff` | A withdrawal was attempted before `cliff_ledger`. |
+| 9 | `ExceedsWithdrawable` | The withdrawal amount is more than `withdrawable_amount`. |
+| 10 | `NotCancellable` | `cancel_stream` was called on a stream created with `cancellable = false`. |
+| 11 | `AlreadyFinalized` | The stream is already cancelled or completed. |
+| 12 | `MathOverflow` | Checked arithmetic overflowed or underflowed. |
+| 13 | `Paused` | `create_stream` was called while the contract is paused. |
+
+### Vault contract (codes 1-7)
+
+| Code | Name | Meaning |
+|---|---|---|
+| 1 | `AlreadyInitialized` | `initialize` was called a second time. |
+| 2 | `NotInitialized` | A function ran before `initialize`. |
+| 3 | `Unauthorized` | The caller is not the configured Stream contract or the admin. |
+| 4 | `InvalidAmount` | An amount was zero or negative. |
+| 5 | `InsufficientBalance` | The stream's locked balance is smaller than the amount requested. |
+| 6 | `MathOverflow` | Checked arithmetic overflowed or underflowed. |
+| 7 | `TokenMismatch` | The token does not match the one the stream was funded with. |
+
+### Registry contract (codes 1-6)
+
+| Code | Name | Meaning |
+|---|---|---|
+| 1 | `AlreadyInitialized` | `initialize` was called a second time. |
+| 2 | `NotInitialized` | A function ran before `initialize`. |
+| 3 | `InvalidAmount` | An amount was negative. |
+| 4 | `AlreadyRegistered` | `register_stream` was called twice with the same `stream_id`. |
+| 5 | `StreamNotFound` | `update_stream` referenced a stream that was never registered. |
+| 6 | `MathOverflow` | Checked arithmetic overflowed or underflowed. |
 
 ## Deployed contract addresses
 

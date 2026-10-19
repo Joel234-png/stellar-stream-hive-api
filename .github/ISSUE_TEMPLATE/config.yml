@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Contributing scope note (API problems are issues, not PRs)
+    url: https://github.com/Stellar-Hive/stellar-stream-hive-api/blob/main/CONTRIBUTING.md
+    about: Please read this before opening a PR. API problems must be reported as issues; PRs touching api/ are closed.

@@ -83,12 +83,143 @@ const client = new StreamHiveClient("http://localhost:8080");
 const myStreams = await client.getStreamsByRecipient("GABC...XYZ");
 ```
 
+### Fetching every page
+
+List endpoints are paginated with `limit` and `offset` query parameters and
+report the total number of matching rows in the `X-Total-Count` response
+header. A common need is "all streams for an address", which means walking
+every page. This helper follows `X-Total-Count` with `limit=200`, increasing
+`offset` until every item has been collected, and throws on a non-OK response
+using the same error shape as the `get` helper above:
+
+```typescript
+async function fetchAll<T>(path: string): Promise<T[]> {
+  const limit = 200;
+  const items: T[] = [];
+  let offset = 0;
+
+  while (true) {
+    const separator = path.includes("?") ? "&" : "?";
+    const res = await fetch(`${client["baseUrl"]}${path}${separator}limit=${limit}&offset=${offset}`);
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      throw new Error(`${res.status} ${body.error ?? "unknown_error"}: ${body.message ?? res.statusText}`);
+    }
+
+    const page = (await res.json()) as T[];
+    items.push(...page);
+
+    const totalHeader = res.headers.get("X-Total-Count");
+    const total = totalHeader === null ? null : Number(totalHeader);
+    offset += page.length;
+
+    // Stop when the server reports we've seen everything, or when a short
+    // page tells us there is nothing left to fetch.
+    if (page.length < limit) break;
+    if (total !== null && offset >= total) break;
+  }
+
+  return items;
+}
+
+// Example: every stream paying a given recipient, across all pages.
+const allForRecipient = await fetchAll<StreamView>(
+  `/recipients/${encodeURIComponent("GABC...XYZ")}`,
+);
+```
+
+<CalloutBox variant="info" title="Reading X-Total-Count in the browser">
+  Browsers only expose a response header to JavaScript if the server lists it
+  in `Access-Control-Expose-Headers`. The API already sets
+  `Access-Control-Expose-Headers: X-Total-Count`, so `res.headers.get("X-Total-Count")`
+  works from a browser origin. If you proxy the API through your own backend,
+  make sure that proxy forwards the header too.
+</CalloutBox>
+
 <CalloutBox variant="warning" title="Don't do arithmetic on these fields as numbers">
   Every amount field above is typed `string`, not `number`, on purpose --
   see [API Overview: response conventions](/docs/api/overview#response-conventions).
   `Number("30000000000")` loses precision above 2<sup>53</sup>; always parse
   with `BigInt` before doing any arithmetic, as in the next section.
 </CalloutBox>
+
+## Python example
+
+The same rule applies in Python: parse the string amounts with `int()`, never
+`float()`. This sums `withdrawable_amount` across every stream paid to one
+recipient, following the `X-Total-Count` header so it doesn't stop at the
+default page size:
+
+```python
+import requests
+
+BASE_URL = "http://localhost:8080"
+
+
+def total_withdrawable(recipient: str) -> int:
+    total, offset = 0, 0
+    while True:
+        res = requests.get(
+            f"{BASE_URL}/recipients/{recipient}",
+            params={"limit": 200, "offset": offset},
+            timeout=10,
+        )
+        res.raise_for_status()
+        page = res.json()
+        total += sum(int(stream["withdrawable_amount"]) for stream in page)
+        offset += len(page)
+        if not page or offset >= int(res.headers["X-Total-Count"]):
+            return total
+
+
+print(total_withdrawable("GDEF...UVW"))  # total in stroops
+```
+
+## Rust example
+
+The same read in Rust, using `reqwest` and `serde`. The amounts deserialize as
+`String` and are parsed into `i128`, which is the same representation the API
+uses on the wire. This reads the first page of a recipient's streams (the
+default page size is 50):
+
+```toml
+[dependencies]
+reqwest = { version = "0.12", features = ["json"] }
+serde = { version = "1", features = ["derive"] }
+tokio = { version = "1", features = ["full"] }
+```
+
+```rust
+use serde::Deserialize;
+
+#[derive(Deserialize)]
+struct StreamView {
+    id: String,
+    status: String,
+    // Amounts are i128 values serialized as strings, so parse them explicitly.
+    withdrawable_amount: String,
+}
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let streams: Vec<StreamView> = reqwest::get("http://localhost:8080/recipients/GDEF...UVW")
+        .await?
+        .error_for_status()?
+        .json()
+        .await?;
+
+    let mut total: i128 = 0;
+    for stream in &streams {
+        println!(
+            "stream {} ({}): {}",
+            stream.id, stream.status, stream.withdrawable_amount
+        );
+        total += stream.withdrawable_amount.parse::<i128>()?;
+    }
+    println!("total withdrawable (stroops): {total}");
+    Ok(())
+}
+```
 
 ## Computing `streamed_amount` client-side
 
@@ -141,6 +272,37 @@ const streamed = streamedAmount(
 console.log(streamed); // 15000000000n
 ```
 
+### Converting stroops to a decimal string
+
+Amounts come back as integer strings in stroops (7 decimal places for XLM).
+To display them, convert to `bigint` and format with integer division and
+modulo -- never `Number` or floating point. This helper uses floor semantics,
+so any fractional stroop below the requested precision is truncated rather
+than rounded:
+
+```typescript
+function formatUnits(amount: bigint, decimals = 7): string {
+  const negative = amount < 0n;
+  const abs = negative ? -amount : amount;
+  const base = 10n ** BigInt(decimals);
+  const whole = abs / base;
+  const fraction = abs % base;
+  const fractionStr = fraction.toString().padStart(decimals, "0");
+  const sign = negative ? "-" : "";
+  return decimals === 0 ? `${sign}${whole}` : `${sign}${whole}.${fractionStr}`;
+}
+
+// Test-style examples:
+console.log(formatUnits(30_000_000_000n)); // "3000.0000000"
+console.log(formatUnits(1n));              // "0.0000001"
+console.log(formatUnits(12_345_678n, 7));  // "1.2345678"
+console.log(formatUnits(1_500_000n, 6));   // "1.500000"
+```
+
+For why 7 decimals and how the contract's integer math maps to displayed
+amounts, see the worked example in
+[Streaming Math](/docs/concepts/streaming-math).
+
 You need the current ledger sequence to evaluate this yourself; fetch it from
 Horizon directly (`GET {horizon}/` returns `history_latest_ledger`) or from
 any Soroban RPC's `getLatestLedger` method -- the indexer API doesn't expose
@@ -183,6 +345,147 @@ leaves the `PENDING` status -- see the
 [Soroban RPC documentation](https://developers.stellar.org/docs/data/rpc)
 for the full submit/poll lifecycle, which is generic to any Soroban contract
 call and not specific to this platform.
+
+### Write example: create a stream from the browser with Freighter
+
+This end-to-end example builds a `create_stream` transaction, simulates it,
+signs it with [Freighter](https://www.freighter.app/) through
+`@stellar/freighter-api`, submits it, and polls until the result is final. It
+runs in a browser page, because Freighter injects its signing API into the
+page.
+
+Versions: the code was type-checked against `@stellar/stellar-sdk` **17.2.1**
+and `@stellar/freighter-api` **6.0.1**. It has not yet been run end-to-end
+against testnet.
+
+```bash
+npm install @stellar/stellar-sdk@17.2.1 @stellar/freighter-api@6.0.1
+```
+
+<CalloutBox variant="warning" title="Placeholders">
+  `<STREAM_CONTRACT_ID>` and `<XLM_SAC_CONTRACT_ID>` are placeholders. The
+  contracts are not deployed yet -- see
+  [Deployed contract addresses](#deployed-contract-addresses).
+</CalloutBox>
+
+```typescript
+import {
+  Address,
+  BASE_FEE,
+  Contract,
+  Networks,
+  nativeToScVal,
+  rpc,
+  scValToNative,
+  TransactionBuilder,
+} from "@stellar/stellar-sdk";
+import {
+  isConnected,
+  requestAccess,
+  signTransaction,
+} from "@stellar/freighter-api";
+
+const RPC_URL = "https://soroban-testnet.stellar.org";
+const NETWORK_PASSPHRASE = Networks.TESTNET;
+const STREAM_CONTRACT_ID = "<STREAM_CONTRACT_ID>";
+
+const server = new rpc.Server(RPC_URL);
+
+export interface CreateStreamParams {
+  token: string;
+  recipient: string;
+  totalAmount: bigint;
+  startLedger: number;
+  endLedger: number;
+  cliffLedger: number;
+  cancellable: boolean;
+}
+
+/** Builds, simulates, signs with Freighter, submits and polls one create_stream call. */
+export async function createStream(params: CreateStreamParams): Promise<bigint> {
+  // 1. Make sure Freighter is installed and the user has granted this site access.
+  const connected = await isConnected();
+  if (connected.error || !connected.isConnected) {
+    throw new Error("Freighter is not installed or not connected");
+  }
+  const access = await requestAccess();
+  if (access.error) {
+    throw new Error(`Freighter access was refused: ${access.error.message}`);
+  }
+  const sender = access.address;
+
+  // 2. Build the transaction with the Stream contract's create_stream arguments.
+  const account = await server.getAccount(sender);
+  const stream = new Contract(STREAM_CONTRACT_ID);
+  const unsigned = new TransactionBuilder(account, {
+    fee: BASE_FEE,
+    networkPassphrase: NETWORK_PASSPHRASE,
+  })
+    .addOperation(
+      stream.call(
+        "create_stream",
+        new Address(sender).toScVal(),
+        new Address(params.recipient).toScVal(),
+        new Address(params.token).toScVal(),
+        nativeToScVal(params.totalAmount, { type: "i128" }),
+        nativeToScVal(params.startLedger, { type: "u32" }),
+        nativeToScVal(params.endLedger, { type: "u32" }),
+        nativeToScVal(params.cliffLedger, { type: "u32" }),
+        nativeToScVal(params.cancellable, { type: "bool" }),
+      ),
+    )
+    .setTimeout(30)
+    .build();
+
+  // 3. Simulate, and attach the resource footprint and fee the network asks for.
+  const prepared = await server.prepareTransaction(unsigned);
+
+  // 4. Sign in Freighter. The wallet checks that the signer matches `address`.
+  const signed = await signTransaction(prepared.toXDR(), {
+    networkPassphrase: NETWORK_PASSPHRASE,
+    address: sender,
+  });
+  if (signed.error) {
+    throw new Error(`Signing was rejected: ${signed.error.message}`);
+  }
+  const signedTx = TransactionBuilder.fromXDR(signed.signedTxXdr, NETWORK_PASSPHRASE);
+
+  // 5. Submit and poll until the ledger that includes it closes.
+  const sent = await server.sendTransaction(signedTx);
+  if (sent.status === "ERROR") {
+    throw new Error(`Submission rejected with status ${sent.status}`);
+  }
+
+  let result = await server.getTransaction(sent.hash);
+  while (result.status === rpc.Api.GetTransactionStatus.NOT_FOUND) {
+    await new Promise((resolve) => setTimeout(resolve, 1_000));
+    result = await server.getTransaction(sent.hash);
+  }
+  if (result.status !== rpc.Api.GetTransactionStatus.SUCCESS) {
+    throw new Error(`Transaction failed with status ${result.status}`);
+  }
+
+  // create_stream returns the new u64 stream id.
+  return scValToNative(result.returnValue!) as bigint;
+}
+```
+
+Call it with amounts as `bigint`, not `number`, and ledgers relative to the
+current ledger from `server.getLatestLedger()`:
+
+```typescript
+const { sequence } = await server.getLatestLedger();
+
+const streamId = await createStream({
+  token: "<XLM_SAC_CONTRACT_ID>",
+  recipient: "GABC...XYZ",
+  totalAmount: 1_000_000_000n, // 100 XLM in stroops
+  startLedger: sequence,
+  endLedger: sequence + 720, // about one hour at ~5s per ledger
+  cliffLedger: sequence, // no cliff; use sequence + 360 for a halfway cliff
+  cancellable: true,
+});
+```
 
 <CalloutBox variant="info" title="When to prefer direct contract calls over the API">
   Reach for direct RPC calls instead of the indexer API when you need: (1) a
