@@ -37,7 +37,7 @@ const REPOS = [
 
 export default function HomePage() {
   return (
-    <main className="mx-auto max-w-5xl px-6 py-16 sm:py-24">
+    <main id="main-content" tabIndex={-1} className="mx-auto max-w-5xl px-6 py-16 sm:py-24">
       <section className="text-center">
         <p className="mb-4 inline-flex items-center gap-2 rounded-full border border-slate-200 px-3 py-1 text-xs font-medium text-slate-500 dark:border-slate-800 dark:text-slate-400">
           Built on Stellar + Soroban
