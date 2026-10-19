@@ -299,6 +299,88 @@ through `get_status` without any write (see [Lifecycle](#lifecycle)).
   `ExceedsWithdrawable`.
 - **Events:** emits `withdraw`.
 
+`withdrawn` is written before the Vault is called, so the new balance is already
+recorded when funds move.
+
+<figure>
+  <svg
+    viewBox="0 0 720 430"
+    role="img"
+    aria-labelledby="withdraw-diagram-title"
+    style={{ maxWidth: "100%", height: "auto" }}
+  >
+    <title id="withdraw-diagram-title">
+      Sequence diagram of withdraw. The recipient calls the Stream contract,
+      which checks the withdrawable amount and updates withdrawn before calling
+      the Vault's release. The Vault transfers the tokens to the recipient
+      through the token contract. Control returns through the Vault and Stream
+      to the recipient, who receives the amount withdrawn.
+    </title>
+    <defs>
+      <marker
+        id="withdraw-arrow"
+        viewBox="0 0 10 10"
+        refX="9"
+        refY="5"
+        markerWidth="8"
+        markerHeight="8"
+        orient="auto"
+      >
+        <path d="M0 0 L10 5 L0 10 z" fill="currentColor" />
+      </marker>
+    </defs>
+
+    {/* Lifelines */}
+    <g stroke="currentColor" strokeOpacity="0.35" strokeDasharray="4 4">
+      <line x1="80" y1="48" x2="80" y2="405" />
+      <line x1="260" y1="48" x2="260" y2="405" />
+      <line x1="440" y1="48" x2="440" y2="405" />
+      <line x1="610" y1="48" x2="610" y2="405" />
+    </g>
+
+    {/* Participant boxes */}
+    <g fill="none" stroke="currentColor" strokeWidth="1.5">
+      <rect x="30" y="16" width="100" height="30" rx="6" />
+      <rect x="210" y="16" width="100" height="30" rx="6" />
+      <rect x="390" y="16" width="100" height="30" rx="6" />
+      <rect x="560" y="16" width="100" height="30" rx="6" />
+    </g>
+    <g fill="currentColor" fontSize="13" textAnchor="middle">
+      <text x="80" y="36">Recipient</text>
+      <text x="260" y="36">Stream</text>
+      <text x="440" y="36">Vault</text>
+      <text x="610" y="36">Token</text>
+    </g>
+
+    {/* Messages */}
+    <g fill="none" stroke="currentColor" strokeWidth="1.5">
+      <line x1="80" y1="100" x2="260" y2="100" markerEnd="url(#withdraw-arrow)" />
+      <path d="M260 120 H290 V140 H260" markerEnd="url(#withdraw-arrow)" />
+      <path d="M260 160 H290 V180 H260" markerEnd="url(#withdraw-arrow)" />
+      <line x1="260" y1="220" x2="440" y2="220" markerEnd="url(#withdraw-arrow)" />
+      <line x1="440" y1="260" x2="610" y2="260" markerEnd="url(#withdraw-arrow)" />
+      <line x1="610" y1="295" x2="440" y2="295" strokeDasharray="5 4" markerEnd="url(#withdraw-arrow)" />
+      <line x1="440" y1="325" x2="260" y2="325" strokeDasharray="5 4" markerEnd="url(#withdraw-arrow)" />
+      <line x1="260" y1="360" x2="80" y2="360" strokeDasharray="5 4" markerEnd="url(#withdraw-arrow)" />
+    </g>
+    <g fill="currentColor" fontSize="12">
+      <text x="170" y="93" textAnchor="middle">withdraw(amount)</text>
+      <text x="298" y="134">check withdrawable</text>
+      <text x="298" y="174">update withdrawn</text>
+      <text x="350" y="213" textAnchor="middle">release(id, recipient, amount)</text>
+      <text x="525" y="253" textAnchor="middle">transfer to recipient</text>
+      <text x="525" y="288" textAnchor="middle">ok</text>
+      <text x="350" y="318" textAnchor="middle">ok</text>
+      <text x="170" y="353" textAnchor="middle">return amount</text>
+    </g>
+  </svg>
+  <figcaption>
+    Sequence for withdraw. The recipient must authorize the call, and
+    withdrawn is updated before the Vault releases the tokens. Dashed arrows
+    are returns.
+  </figcaption>
+</figure>
+
 ### `withdraw_max`
 
 ```rust
