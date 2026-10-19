@@ -46,11 +46,15 @@ export default function CodeBlock(props: { children?: ReactNode }) {
         <span className="text-xs font-medium uppercase tracking-wide text-slate-400">{language}</span>
         <button
           type="button"
+          aria-label="Copy code"
           onClick={handleCopy}
           className="rounded px-2 py-1 text-xs font-medium text-slate-400 transition hover:bg-slate-800 hover:text-slate-100"
         >
           {copied ? "Copied" : "Copy"}
         </button>
+        <span className="sr-only" aria-live="polite">
+          {copied ? "Code copied to clipboard" : ""}
+        </span>
       </div>
       <pre className="overflow-x-auto p-4 text-sm leading-relaxed text-slate-100" {...rest}>
         {children}
