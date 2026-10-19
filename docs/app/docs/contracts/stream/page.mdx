@@ -155,6 +155,92 @@ let stream_id = client.create_stream(
 );
 ```
 
+The sender calls only the Stream contract. The nested calls in the diagram below
+all happen inside that one transaction.
+
+<figure>
+  <svg
+    viewBox="0 0 720 460"
+    role="img"
+    aria-labelledby="create-stream-diagram-title"
+    style={{ maxWidth: "100%", height: "auto" }}
+  >
+    <title id="create-stream-diagram-title">
+      Sequence diagram of create_stream. The sender authorizes the call and
+      invokes the Stream contract. Stream calls the Vault's deposit, and the
+      Vault pulls the tokens from the sender through the token contract. Stream
+      then stores the new stream, registers it with the Registry, and returns
+      the stream id to the sender.
+    </title>
+    <defs>
+      <marker
+        id="create-stream-arrow"
+        viewBox="0 0 10 10"
+        refX="9"
+        refY="5"
+        markerWidth="8"
+        markerHeight="8"
+        orient="auto"
+      >
+        <path d="M0 0 L10 5 L0 10 z" fill="currentColor" />
+      </marker>
+    </defs>
+
+    {/* Lifelines */}
+    <g stroke="currentColor" strokeOpacity="0.35" strokeDasharray="4 4">
+      <line x1="80" y1="48" x2="80" y2="445" />
+      <line x1="240" y1="48" x2="240" y2="445" />
+      <line x1="400" y1="48" x2="400" y2="445" />
+      <line x1="550" y1="48" x2="550" y2="445" />
+      <line x1="660" y1="48" x2="660" y2="445" />
+    </g>
+
+    {/* Participant boxes */}
+    <g fill="none" stroke="currentColor" strokeWidth="1.5">
+      <rect x="30" y="16" width="100" height="30" rx="6" />
+      <rect x="190" y="16" width="100" height="30" rx="6" />
+      <rect x="350" y="16" width="100" height="30" rx="6" />
+      <rect x="500" y="16" width="100" height="30" rx="6" />
+      <rect x="610" y="16" width="100" height="30" rx="6" />
+    </g>
+    <g fill="currentColor" fontSize="13" textAnchor="middle">
+      <text x="80" y="36">Sender</text>
+      <text x="240" y="36">Stream</text>
+      <text x="400" y="36">Vault</text>
+      <text x="550" y="36">Token</text>
+      <text x="660" y="36">Registry</text>
+    </g>
+
+    {/* Messages */}
+    <g fill="none" stroke="currentColor" strokeWidth="1.5">
+      <path d="M80 100 H110 V120 H80" markerEnd="url(#create-stream-arrow)" />
+      <line x1="80" y1="150" x2="240" y2="150" markerEnd="url(#create-stream-arrow)" />
+      <line x1="240" y1="195" x2="400" y2="195" markerEnd="url(#create-stream-arrow)" />
+      <line x1="400" y1="240" x2="550" y2="240" markerEnd="url(#create-stream-arrow)" />
+      <line x1="550" y1="280" x2="400" y2="280" strokeDasharray="5 4" markerEnd="url(#create-stream-arrow)" />
+      <line x1="400" y1="315" x2="240" y2="315" strokeDasharray="5 4" markerEnd="url(#create-stream-arrow)" />
+      <path d="M240 340 H270 V360 H240" markerEnd="url(#create-stream-arrow)" />
+      <line x1="240" y1="395" x2="660" y2="395" markerEnd="url(#create-stream-arrow)" />
+      <line x1="240" y1="430" x2="80" y2="430" strokeDasharray="5 4" markerEnd="url(#create-stream-arrow)" />
+    </g>
+    <g fill="currentColor" fontSize="12">
+      <text x="118" y="114">require_auth()</text>
+      <text x="160" y="143" textAnchor="middle">create_stream(...)</text>
+      <text x="320" y="188" textAnchor="middle">vault.deposit(amount)</text>
+      <text x="475" y="233" textAnchor="middle">transfer from sender</text>
+      <text x="475" y="273" textAnchor="middle">ok</text>
+      <text x="320" y="308" textAnchor="middle">ok</text>
+      <text x="278" y="354">store stream</text>
+      <text x="450" y="388" textAnchor="middle">register_stream(id)</text>
+      <text x="160" y="423" textAnchor="middle">return id</text>
+    </g>
+  </svg>
+  <figcaption>
+    Sequence for create_stream. Dashed arrows are returns. Only the Stream
+    contract is called directly by the sender.
+  </figcaption>
+</figure>
+
 ### `streamed_amount`
 
 ```rust
