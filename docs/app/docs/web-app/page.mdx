@@ -148,3 +148,21 @@ Only visible to the sender, and only when the stream was created with
   permanently at that ledger. If you're unsure, double-check the amounts
   shown in the confirmation dialog before signing.
 </CalloutBox>
+
+## Troubleshooting
+
+### "Wrong network" badge
+
+**Symptom:** the app shows a **Wrong network** badge (often next to your
+connected address) and actions like creating or withdrawing a stream are
+disabled or fail.
+
+**Cause:** Freighter is set to a different network than the one the web app
+is configured for. The app compares the wallet's active network against its
+own configuration and warns when they don't match.
+
+**Fix:** open Freighter's network selector and switch to the network that
+matches the app's configuration (by default, **Test Net**). The badge clears
+once the two agree. If you intentionally need a different network, see the
+network table in the [Network Guide](/docs/getting-started#network-guide) to
+confirm which network the app is pointed at.
