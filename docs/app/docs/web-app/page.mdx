@@ -27,8 +27,8 @@ web app does is privileged or otherwise unavailable to you directly.
    approve the connection -- approving only shares your public address with
    the site; it never shares your secret key, and no transaction is signed at
    this step.
-4. Once connected, the app displays your address and testnet XLM balance in
-   the header.
+4. Once connected, the app displays your shortened address and the active
+   network badge in the header (it does not display a wallet XLM balance).
 
 <CalloutBox variant="info">
   If your testnet account has no funds yet, use
@@ -57,8 +57,11 @@ web app does is privileged or otherwise unavailable to you directly.
      later. This cannot be changed after creation.
 3. Click **Create Stream**. Freighter will prompt you to sign the
    `create_stream` transaction. This is the only signature required to fund
-   the entire stream -- the app performs the token approval and the
-   `create_stream` call together.
+   the entire stream -- no separate token approval (`approve`) transaction is
+   signed; instead, `create_stream` invokes the [Vault contract's `deposit`](/docs/contracts/vault#deposit)
+   in the same transaction, and your single signature authorizes both the
+   contract call and the token transfer into the Vault via Soroban's sub-invocation
+   auth (`sender.require_auth()`).
 4. Once confirmed, the new stream appears on your dashboard with status
    **Pending** (if its start time is in the future) or **Active**.
 
@@ -78,13 +81,15 @@ figures:
 - **Withdrawable** -- what the recipient could withdraw right now
   (`withdrawable_amount`).
 
-These numbers are re-fetched from the [indexer API](/docs/api/overview)
-on a short interval (a few seconds) while the page is open, so a stream in
-progress visibly ticks upward without needing a manual refresh. The
-underlying computation is exactly the formula in
-[Streaming Math](/docs/concepts/streaming-math) -- the web app does not invent
-its own accrual logic, it reads the same numbers the API and the contract
-itself would compute.
+Rather than polling the indexer API on every tick, the web app computes the
+live balance client-side in `useLiveBalance`: it fetches the latest ledger
+sequence and close timestamp from the network, ticks once per second by
+estimating the current ledger from elapsed wall-clock time (~5 seconds per
+ledger), and re-syncs with the chain every 30 seconds to correct for drift in
+actual ledger close times. All amount math uses `BigInt` floor division with
+the exact multiply-before-divide formula in
+[Streaming Math](/docs/concepts/streaming-math) -- the web app never
+overstates what the contract itself would allow you to withdraw.
 
 <CalloutBox variant="warning" title="Before the cliff, Withdrawable stays at zero">
   If a stream has a cliff, expect **Streamed** to climb from the moment the
@@ -119,10 +124,13 @@ Only visible to the sender, and only when the stream was created with
    how much the recipient will keep (everything streamed so far) and how much
    will be refunded back to you -- computed via
    [Streaming Math: what happens on cancel](/docs/concepts/streaming-math#what-happens-on-cancel).
+   If you cancel **before `start_ledger` or before `cliff_ledger`**, the
+   streamed amount at cancellation is `0`: the recipient receives `0` and the
+   entire `total_amount` (100% of the locked funds) is refunded to the sender.
 3. Confirm and sign with Freighter. Once the transaction lands, the stream's
    status changes to **Cancelled**, the recipient's already-accrued portion
-   becomes immediately withdrawable (if it wasn't already), and the remainder
-   is refunded to you in the same transaction.
+   (if any had vested past the cliff) becomes immediately withdrawable, and the
+   remainder is refunded to you in the same transaction.
 
 <CalloutBox variant="danger" title="Cancellation is immediate and irreversible">
   There is no "undo cancel." Once confirmed, the stream stops accruing
