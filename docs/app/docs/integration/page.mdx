@@ -245,8 +245,8 @@ function streamedAmount(
   currentLedger: bigint,
 ): bigint {
   if (currentLedger <= startLedger) return 0n;
-  if (currentLedger < cliffLedger) return 0n;
   if (currentLedger >= endLedger) return totalAmount;
+  if (currentLedger < cliffLedger) return 0n;
 
   const elapsed = currentLedger - startLedger;
   const duration = endLedger - startLedger;
@@ -254,48 +254,9 @@ function streamedAmount(
 }
 ```
 
-## Calling the contracts directly
-
-When you need to *write* -- create a stream, withdraw, or cancel -- you call
-the contract through Soroban RPC. The snippet below builds a `withdraw`
-transaction, simulates it to get the resource footprint and fee, then signs
-and submits it. It uses `nativeToScVal` to encode the stream id argument and
-`scValToNative` to decode the simulated return value:
-
-```typescript
-import {
-  Contract,
-  rpc,
-  TransactionBuilder,
-  Networks,
-  BASE_FEE,
-  nativeToScVal,
-  scValToNative,
-} from "@stellar/stellar-sdk";
-
-const server = new rpc.Server("https://soroban-testnet.stellar.org");
-const contract = new Contract("C..."); // your deployed stream-hive contract id
-
-const source = await server.getAccount(senderPublicKey);
-const tx = new TransactionBuilder(source, {
-  fee: BASE_FEE,
-  networkPassphrase: Networks.TESTNET,
-})
-  .addOperation(
-    contract.call("withdraw", nativeToScVal(streamId, { type: "u64" })),
-  )
-  .setTimeout(30)
-  .build();
-
-const prepared = await server.prepareTransaction(tx);
-prepared.sign(senderKeypair);
-const result = await server.sendTransaction(prepared);
-const returned = scValToNative(result.returnValue);
-```
-
-<CalloutBox variant="warning" title="The API is read-only">
-  The indexer never signs or submits transactions. Writes always go through
-  the contracts, and you are responsible for the signing key and the network
-  passphrase. Use `Networks.TESTNET` for testnet and `Networks.PUBLIC` for
-  mainnet -- mixing them up will produce a transaction the network rejects.
-</CalloutBox>
+To get the current ledger, call `GET /ready` and read its `latest_ledger`
+field. The same response also reports `synced`, `contract_configured`, and
+`indexed_streams`, so it doubles as a health check. If you'd rather not depend
+on the API for this value, you can fetch the latest ledger from Horizon or call
+`getLatestLedger` on the Soroban RPC server directly -- both are authoritative
+and give you the same ledger sequence number.
