@@ -12,7 +12,10 @@ The Registry contract maintains an on-chain index of every stream and
 platform-wide aggregate statistics. It exists so that "list all streams" or
 "what's the platform's total volume" can be answered by a single contract
 call, without an off-chain indexer walking every `create` event from
-genesis. `stellar-stream-hive-api`'s own `/stats` endpoint mirrors the shape
+genesis. The Stream contract does not call the Registry: the Registry is
+optional and is populated today by a separate caller (for example an off-chain
+service) invoking `register_stream` and `update_stream` after the corresponding
+Stream events. `stellar-stream-hive-api`'s own `/stats` endpoint mirrors the shape
 of `get_stats` (computed independently from indexed events, as a
 cross-check) -- see [API Reference: Stats](/docs/api/stats).
 
@@ -76,8 +79,8 @@ protect the integrity of the index rather than custody of funds.
 pub fn register_stream(env: Env, stream_id: u64, sender: Address, recipient: Address)
 ```
 
-Called once by the Stream contract inside `create_stream`, immediately after a
-new stream is assigned its id. Adds the id to the sender's and recipient's
+Called once per stream by whichever caller feeds the Registry (not the Stream
+contract) after a new stream is created. Adds the id to the sender's and recipient's
 lookup indices and increments `total_streams` / `active_streams`.
 
 - **Auth:** caller must be the registered Stream contract (same
@@ -90,8 +93,8 @@ lookup indices and increments `total_streams` / `active_streams`.
 pub fn update_stream(env: Env, stream_id: u64, withdrawn_delta: i128, status: StreamStatus)
 ```
 
-Called by the Stream contract after every `withdraw`, `withdraw_max`, and
-`cancel_stream` to keep the Registry's aggregate figures correct without it
+Called by whichever caller feeds the Registry (not the Stream contract) after
+`withdraw`, `withdraw_max`, and `cancel_stream` to keep the Registry's aggregate figures correct without it
 having to recompute accrual for every stream on every call. `withdrawn_delta`
 is added to the Registry's running `total_withdrawn`; if `status` transitions
 away from `Active`/`Pending`, `active_streams` is decremented.
@@ -109,8 +112,57 @@ Returns every stream id ever registered, oldest first. Intended for small
 deployments and tooling; for platform-scale queries prefer
 [`GET /streams`](/docs/api/streams) on the indexer API, which paginates and
 avoids loading the full on-chain vector into a transaction's execution budget.
+On-chain, prefer [`get_streams_page`](#get_streams_page) over `get_all_streams`
+for large registries.
 
 - **Auth:** none (read-only).
+
+### `stream_count`
+
+```rust
+pub fn stream_count(env: Env) -> u32
+```
+
+Returns the number of streams ever registered.
+
+- **Auth:** none (read-only).
+- **Errors:** none documented.
+
+### `get_streams_page`
+
+```rust
+pub fn get_streams_page(env: Env, offset: u32, limit: u32) -> Vec<u64>
+```
+
+Returns a registration-ordered page of stream ids. `limit` is capped at
+`MAX_PAGE_SIZE` (50); an `offset` past the end returns an empty vec. Prefer
+this over [`get_all_streams`](#get_all_streams) on a large registry.
+
+- **Auth:** none (read-only).
+- **Errors:** none documented.
+
+### `get_stream_record`
+
+```rust
+pub fn get_stream_record(env: Env, stream_id: u64) -> StreamRecord
+```
+
+Read-only accessor for a single stream's registry-side summary: sender,
+recipient, token, amount, withdrawn and status.
+
+- **Auth:** none (read-only).
+- **Errors:** `StreamNotFound` if no stream with that id is registered.
+
+### `get_admin`
+
+```rust
+pub fn get_admin(env: Env) -> Address
+```
+
+Returns the admin address recorded at `initialize`.
+
+- **Auth:** none (read-only).
+- **Errors:** `NotInitialized` if called before `initialize`.
 
 ### `get_stats`
 
