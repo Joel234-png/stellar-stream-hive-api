@@ -13,12 +13,12 @@ const PILLARS = [
   },
   {
     title: "Registry contract",
-    body: "Indexes every stream on-chain for fast sender/recipient lookups and aggregate platform stats.",
+    body: "Maintains an on-chain index of all and active stream IDs and aggregate platform statistics (total streams, active streams, total streamed, and total withdrawn).",
     href: "/docs/contracts/registry",
   },
   {
     title: "Indexer API",
-    body: "A Rust/Axum service that polls Horizon, decodes Soroban events, and serves stream data over a simple REST API.",
+    body: "A Rust/Axum service that polls Soroban RPC, decodes Soroban events, and serves stream data over a simple REST API.",
     href: "/docs/api/overview",
   },
 ];
