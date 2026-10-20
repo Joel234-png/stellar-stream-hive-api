@@ -69,6 +69,25 @@ web app does is privileged or otherwise unavailable to you directly.
   on-chain schedule is the ledger numbers, not the calendar dates.
 </CalloutBox>
 
+## Your streams
+
+Two pages list the streams tied to your connected wallet:
+
+- **Sending** (`/sending`) -- streams you created as the sender.
+- **Receiving** (`/receiving`) -- streams where you are the recipient.
+
+Each list can be narrowed with the status filters **All**, **Live**,
+**Completed**, and **Cancelled**, and exported to CSV for record-keeping or
+spreadsheet analysis.
+
+<CalloutBox variant="info" title="These lists need the indexer API">
+  The **Sending** and **Receiving** pages read from the
+  [indexer API](/docs/api/overview), configured via the
+  `NEXT_PUBLIC_API_BASE_URL` environment variable. If that variable is unset
+  or the API is unreachable, these lists will be empty or fail to load even
+  though the streams exist on-chain.
+</CalloutBox>
+
 ## Watching a balance accrue
 
 Open any stream's detail page to see a live-updating progress bar and two
