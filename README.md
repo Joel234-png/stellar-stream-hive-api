@@ -83,3 +83,6 @@ Apache-2.0.
 
 <!-- handsoff-issue-46 -->
 - #46: Add an "Invariants" section to Streaming Math
+
+<!-- handsoff-issue-47 -->
+- #47: Fix the Integration TypeScript example: cliff must not zero `streamed_amount`
