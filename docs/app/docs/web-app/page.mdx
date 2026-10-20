@@ -39,7 +39,7 @@ web app does is privileged or otherwise unavailable to you directly.
 
 ## Creating a stream
 
-1. Click **New Stream** from the dashboard.
+1. Click **Create Stream** in the navigation bar.
 2. Fill in the form:
    - **Recipient** -- the `G...` address that will receive the stream.
    - **Token** -- defaults to native XLM; can be set to any SEP-41 token
@@ -96,11 +96,15 @@ itself would compute.
 
 ## Withdrawing
 
-From a stream's detail page, the recipient sees a **Withdraw** button
-whenever `withdrawable_amount > 0`:
+From a stream's detail page, the recipient sees a **Withdraw** button:
 
-1. Click **Withdraw**. The app defaults to withdrawing the full available
-   amount (calling `withdraw_max`), or you can specify a smaller amount.
+1. Click **Withdraw** and choose **Max withdrawable** (the default) or enter a
+   **Custom amount**, then click **Confirm withdrawal**. Rather than trusting
+   the client-side ticking estimate or calling `withdraw_max`, the app
+   re-fetches `withdrawable_amount` directly from the contract on-chain at
+   submit time (validating that any custom amount does not exceed it) and calls
+   [`withdraw`](/docs/contracts/stream#withdraw) with that exact re-fetched
+   (or requested) amount.
 2. Freighter prompts you to sign. Only the connected wallet's address needs to
    match the stream's `recipient` -- the contract enforces this itself (see
    [Stream contract: withdraw](/docs/contracts/stream#withdraw)), so
