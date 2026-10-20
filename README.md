@@ -80,3 +80,6 @@ Apache-2.0.
 
 <!-- handsoff-issue-45 -->
 - #45: Link Streaming Math to the contract's reference implementation
+
+<!-- handsoff-issue-46 -->
+- #46: Add an "Invariants" section to Streaming Math
