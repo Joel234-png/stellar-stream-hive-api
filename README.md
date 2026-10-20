@@ -75,3 +75,8 @@ Nothing in this repository fabricates a real contract address anywhere.
 ## License
 
 Apache-2.0.
+
+## Handsoff notes
+
+<!-- handsoff-issue-45 -->
+- #45: Link Streaming Math to the contract's reference implementation
