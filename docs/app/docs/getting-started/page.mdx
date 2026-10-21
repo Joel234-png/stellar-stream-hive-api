@@ -48,7 +48,7 @@ To create or interact with a stream you'll need:
 - **The Stellar CLI** (`stellar` -- formerly `soroban-cli`), if you're
   interacting with contracts directly -- see
   [Integration Guide](/docs/integration#direct-contract-interaction).
-- **Node.js 18+**, only if you're running the
+- **Node.js 20+**, only if you're running the
   [web app](https://github.com/Stellar-Hive/stellar-stream-hive-frontend) or
   this docs site locally.
 - **Rust + the `wasm32v1-none` target**, only if you're building the
@@ -100,13 +100,16 @@ stellar contract invoke \
   --cancellable true
 ```
 
+   Stream IDs start at `1`, so the first stream created on a fresh deployment
+   returns `1`.
+
 3. **Watch it accrue** -- either poll the contract directly:
 
 ```bash
 stellar contract invoke \
   --id <STREAM_CONTRACT_ID> \
   --network testnet \
-  -- withdrawable_amount --stream_id 0
+  -- withdrawable_amount --stream_id 1
 ```
 
    or query the indexer API once it is ready and has picked up the `create`
