@@ -75,3 +75,14 @@ Nothing in this repository fabricates a real contract address anywhere.
 ## License
 
 Apache-2.0.
+
+## Handsoff notes
+
+<!-- handsoff-issue-45 -->
+- #45: Link Streaming Math to the contract's reference implementation
+
+<!-- handsoff-issue-46 -->
+- #46: Add an "Invariants" section to Streaming Math
+
+<!-- handsoff-issue-47 -->
+- #47: Fix the Integration TypeScript example: cliff must not zero `streamed_amount`

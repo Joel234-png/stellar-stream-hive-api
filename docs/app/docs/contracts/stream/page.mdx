@@ -12,8 +12,10 @@ The Stream contract is the platform's main entry point: it owns each stream's
 schedule, computes accrual using the formula in
 [Streaming Math](/docs/concepts/streaming-math), and is the only contract
 authorized to move funds in or out of the [Vault](/docs/contracts/vault). It
-also pushes lifecycle updates to the [Registry](/docs/contracts/registry) so
-platform-wide queries stay in sync.
+does not call the [Registry](/docs/contracts/registry): no Stream function
+invokes it. The Registry is an optional index that a separate caller populates
+by invoking its `register_stream` and `update_stream` functions after the
+corresponding Stream events.
 
 Source: [`stellar-stream-hive-contract`](https://github.com/Stellar-Hive/stellar-stream-hive-contract)
 (contract module `stream`). Deployment addresses are not yet published --

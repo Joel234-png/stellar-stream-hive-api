@@ -12,7 +12,10 @@ The Registry contract maintains an on-chain index of every stream and
 platform-wide aggregate statistics. It exists so that "list all streams" or
 "what's the platform's total volume" can be answered by a single contract
 call, without an off-chain indexer walking every `create` event from
-genesis. `stellar-stream-hive-api`'s own `/stats` endpoint mirrors the shape
+genesis. The Stream contract does not call the Registry: the Registry is
+optional and is populated today by a separate caller (for example an off-chain
+service) invoking `register_stream` and `update_stream` after the corresponding
+Stream events. `stellar-stream-hive-api`'s own `/stats` endpoint mirrors the shape
 of `get_stats` (computed independently from indexed events, as a
 cross-check) -- see [API Reference: Stats](/docs/api/stats).
 
@@ -36,8 +39,8 @@ pub struct RegistryStats {
 | Field | Meaning |
 |---|---|
 | `total_streams` | Count of every stream ever created, regardless of current status. |
-| `active_streams` | Count of streams currently in `Pending` or `Active` status. |
-| `total_streamed` | Sum of `streamed_amount` across every stream, evaluated at the ledger `get_stats` is called at. |
+| `active_streams` | Count of streams whose last-recorded status is `Active`. `Pending` does not count. |
+| `total_streamed` | Lifetime cumulative sum of every stream's committed `amount` at registration. It only ever goes up and is not live accrual. |
 | `total_withdrawn` | Sum of `withdrawn` across every stream. |
 
 ### `RegistryError`
@@ -46,8 +49,10 @@ pub struct RegistryStats {
 pub enum RegistryError {
     AlreadyInitialized = 1,
     NotInitialized = 2,
-    Unauthorized = 3,   // caller is not the registered Stream contract
-    StreamNotFound = 4,
+    InvalidAmount = 3,      // an amount argument was negative
+    AlreadyRegistered = 4,  // stream_id was already registered
+    StreamNotFound = 5,
+    MathOverflow = 6,       // checked arithmetic overflowed or underflowed
 }
 ```
 
@@ -56,48 +61,57 @@ pub enum RegistryError {
 ### `initialize`
 
 ```rust
-pub fn initialize(env: Env, stream_contract: Address)
+pub fn initialize(env: Env, admin: Address)
 ```
 
-One-time setup. Records the only contract address permitted to call
-`register_stream` and `update_stream` -- the same caller-identity pattern used
-by the [Vault's `release`/`refund` functions](/docs/contracts/vault#release), applied here to
-protect the integrity of the index rather than custody of funds.
+One-time setup. Records the `admin` address and initializes `RegistryStats`
+to all zeros.
 
-- **Auth:** none beyond "must be called once, at deployment, by whoever
-  deploys the Registry" -- there is no separate admin key to rotate this
-  later, by design; if the Stream contract is ever redeployed, the Registry
-  must be redeployed alongside it.
+- **Auth:** `admin.require_auth()`.
 - **Errors:** `AlreadyInitialized`.
 
 ### `register_stream`
 
 ```rust
-pub fn register_stream(env: Env, stream_id: u64, sender: Address, recipient: Address)
+pub fn register_stream(
+    env: Env,
+    stream_id: u64,
+    sender: Address,
+    recipient: Address,
+    token: Address,
+    amount: i128,
+)
 ```
 
-Called once by the Stream contract inside `create_stream`, immediately after a
-new stream is assigned its id. Adds the id to the sender's and recipient's
-lookup indices and increments `total_streams` / `active_streams`.
+Records a newly created stream, normally called by the Stream contract inside
+`create_stream` right after the stream is assigned its id. The stream is
+recorded with status `Active`. It increments `total_streams`,
+`active_streams` and `total_streamed` (by `amount`), and emits a `register`
+event.
 
-- **Auth:** caller must be the registered Stream contract (same
-  caller-identity check pattern as the Vault).
-- **Errors:** `Unauthorized`.
+- **Auth:** none; the function takes no caller parameter.
+- **Errors:** `AlreadyRegistered` if `stream_id` was already registered,
+  `InvalidAmount` if `amount` is negative, `MathOverflow`.
 
 ### `update_stream`
 
 ```rust
-pub fn update_stream(env: Env, stream_id: u64, withdrawn_delta: i128, status: StreamStatus)
+pub fn update_stream(env: Env, stream_id: u64, withdrawn: i128, status: StreamStatus)
 ```
 
-Called by the Stream contract after every `withdraw`, `withdraw_max`, and
-`cancel_stream` to keep the Registry's aggregate figures correct without it
-having to recompute accrual for every stream on every call. `withdrawn_delta`
-is added to the Registry's running `total_withdrawn`; if `status` transitions
-away from `Active`/`Pending`, `active_streams` is decremented.
+Called after every `withdraw`, `withdraw_max`, and `cancel_stream`. `withdrawn`
+is the stream's **absolute** withdrawn total, not a delta. The Registry
+computes the delta against the previously recorded value internally and adds
+it to `total_withdrawn`. It then stores the new `withdrawn` and `status`.
 
-- **Auth:** caller must be the registered Stream contract.
-- **Errors:** `Unauthorized`, `StreamNotFound`.
+`active_streams` changes only when the status moves into or out of `Active`:
+a transition into `Active` increments it, a transition out of `Active`
+(for example to a cancelled or completed status) decrements it, and any other
+update leaves it unchanged.
+
+- **Auth:** none; the function takes no caller parameter.
+- **Errors:** `StreamNotFound`, `InvalidAmount` if `withdrawn` is negative,
+  `MathOverflow`.
 
 ### `get_all_streams`
 
@@ -109,8 +123,56 @@ Returns every stream id ever registered, oldest first. Intended for small
 deployments and tooling; for platform-scale queries prefer
 [`GET /streams`](/docs/api/streams) on the indexer API, which paginates and
 avoids loading the full on-chain vector into a transaction's execution budget.
+On-chain, prefer `get_streams_page` over `get_all_streams` for large registries.
 
 - **Auth:** none (read-only).
+
+### `stream_count`
+
+```rust
+pub fn stream_count(env: Env) -> u32
+```
+
+Returns the number of streams ever registered.
+
+- **Auth:** none (read-only).
+- **Errors:** none documented.
+
+### `get_streams_page`
+
+```rust
+pub fn get_streams_page(env: Env, offset: u32, limit: u32) -> Vec<u64>
+```
+
+Returns a registration-ordered page of stream ids. `limit` is capped at
+`MAX_PAGE_SIZE` (50); an `offset` past the end returns an empty vec. Prefer
+this over [`get_all_streams`](#get_all_streams) on a large registry.
+
+- **Auth:** none (read-only).
+- **Errors:** none documented.
+
+### `get_stream_record`
+
+```rust
+pub fn get_stream_record(env: Env, stream_id: u64) -> StreamRecord
+```
+
+Read-only accessor for a single stream's registry-side summary: sender,
+recipient, token, amount, withdrawn and status.
+
+- **Auth:** none (read-only).
+- **Errors:** `StreamNotFound` if no stream with that id is registered.
+
+### `get_admin`
+
+```rust
+pub fn get_admin(env: Env) -> Address
+```
+
+Returns the admin address recorded at `initialize`.
+
+- **Auth:** none (read-only).
+- **Errors:** `NotInitialized` if called before `initialize`.
 
 ### `get_stats`
 
@@ -118,21 +180,12 @@ avoids loading the full on-chain vector into a transaction's execution budget.
 pub fn get_stats(env: Env) -> RegistryStats
 ```
 
-Returns the current `RegistryStats`. `total_streamed` reflects live accrual
-computed at call time using the same formula as
-[`streamed_amount`](/docs/contracts/stream#streamed_amount) on the Stream
-contract -- summed across every registered stream.
+Returns the current `RegistryStats`. The Registry keeps these as incremental
+counters, so this is a single read: its cost does not grow with the number of
+streams. `total_streamed` is the lifetime cumulative committed amount, not live
+accrual.
 
 - **Auth:** none (read-only).
-
-<CalloutBox variant="warning" title="Gas/execution cost of get_stats grows with stream count">
-  Because `get_stats` recomputes live accrual for every stream on every call,
-  its execution cost scales linearly with `total_streams`. This is fine for a
-  young platform; once volume is high, prefer the indexer API's
-  <a href="/docs/api/stats">`GET /stats`</a>, which computes the same figures
-  off-chain from already-decoded events with no per-request contract
-  invocation cost.
-</CalloutBox>
 
 ### `get_active_streams`
 
@@ -140,7 +193,7 @@ contract -- summed across every registered stream.
 pub fn get_active_streams(env: Env) -> Vec<u64>
 ```
 
-Returns the ids of every stream currently in `Pending` or `Active` status.
+Returns the ids of every stream whose last-recorded status is `Active`.
 
 - **Auth:** none (read-only).
 
@@ -157,17 +210,24 @@ the second topic:
 
 These are single-value events: the data is the amount itself, not a `Vec`. The
 Stream contract's `create`/`withdraw`/`cancel` events remain the lifecycle feed
-that `stellar-stream-hive-api` indexes. The consolidated table lives in
+that `stellar-stream-hive-api` indexes; the API does not need the Registry's
+events. The consolidated table lives in
 [Stream contract: events emitted](/docs/contracts/stream#events-emitted).
 
 ## Security notes
 
-- `register_stream` and `update_stream` use the same caller-identity
-  authorization pattern as the Vault's `release`/`refund` (see
-  [Security Model](/docs/concepts/security-model)), but the stakes are
-  different: a compromised Registry can only serve *incorrect statistics or
-  listings*, never move funds. Funds safety depends entirely on the Vault's
-  caller check, not the Registry's.
+- `register_stream` and `update_stream` take no caller and are intentionally
+  open: anyone can call them. The Registry never holds or moves funds, so the
+  worst a third party can do is corrupt its statistics and listings. Funds
+  safety depends entirely on the Vault's caller check (see
+  [Security Model](/docs/concepts/security-model)). See the contract repo's
+  [`docs/registry.md`](https://github.com/Stellar-Hive/stellar-stream-hive-contract/blob/main/docs/registry.md) for the rationale.
 - Because of that lower stakes profile, the Registry is a reasonable place to
   add caching, pagination, or alternate indexing strategies over time without
   touching the fund-safety-critical parts of the platform.
+
+<CalloutBox variant="warning" title="Registry data is not a source of truth">
+  Because anyone can write to the Registry, its stats and stream listings can
+  be polluted by third parties. Do not treat Registry data as authoritative;
+  verify against the Stream contract.
+</CalloutBox>

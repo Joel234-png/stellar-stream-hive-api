@@ -51,9 +51,13 @@ To create or interact with a stream you'll need:
 - **Node.js 20+**, only if you're running the
   [web app](https://github.com/Stellar-Hive/stellar-stream-hive-frontend) or
   this docs site locally.
-- **Rust + the `wasm32-unknown-unknown` target**, only if you're building the
+- **Rust + the `wasm32v1-none` target**, only if you're building the
   [contracts](https://github.com/Stellar-Hive/stellar-stream-hive-contract)
-  from source.
+  from source. The contract repo pins `wasm32v1-none` (via its
+  `rust-toolchain.toml`) because soroban-sdk 27.x rejects the older
+  `wasm32-unknown-unknown` target on Rust 1.82+ -- see the
+  [contract repo's CONTRIBUTING setup section](https://github.com/Stellar-Hive/stellar-stream-hive-contract/blob/main/CONTRIBUTING.md#setup)
+  for the exact toolchain and target install steps.
 
 You do **not** need any of the above just to query existing streams -- the
 [indexer API](/docs/api/overview) is a plain public REST endpoint.
@@ -108,11 +112,14 @@ stellar contract invoke \
   -- withdrawable_amount --stream_id 1
 ```
 
-   or query the indexer API once it has picked up the `create` event
-   (polls every 10 seconds -- see [API Reference](/docs/api/overview)):
+   or query the indexer API once it is ready and has picked up the `create`
+   event (polls every 10 seconds -- first check [`GET /ready`](/docs/api/overview#get-ready)
+   reports `synced: true` and `contract_configured: true`, then query the
+   stream; see [API Reference](/docs/api/overview)):
 
 ```bash
-curl https://<your-api-host>/streams/1
+curl https://<your-api-host>/ready
+curl https://<your-api-host>/streams/0
 ```
 
 4. **Withdraw** whatever has accrued, as the recipient:
@@ -122,7 +129,9 @@ stellar contract invoke \
   --id <STREAM_CONTRACT_ID> \
   --source recipient \
   --network testnet \
-  -- withdraw_max --stream_id 1
+  -- withdraw_max \
+  --recipient "$(stellar keys address recipient)" \
+  --stream_id 0
 ```
 
 That's the entire lifecycle. For the fund-safety reasoning behind why
@@ -196,63 +205,6 @@ below. Each table is copied from that contract's `error.rs` in
 |---|---|---|
 | 1 | `AlreadyInitialized` | `initialize` was called a second time. |
 | 2 | `NotInitialized` | A function ran before `initialize`. |
-| 3 | `Unauthorized` | The caller is not the stream's sender or recipient. |
-| 4 | `InvalidAmount` | An amount was zero or negative. |
-| 5 | `InvalidTimeRange` | `end_ledger` was not after `start_ledger`. |
-| 6 | `InvalidCliff` | `cliff_ledger` was outside `[start_ledger, end_ledger]`. |
-| 7 | `StreamNotFound` | No stream exists with that id. |
-| 8 | `BeforeCliff` | A withdrawal was attempted before `cliff_ledger`. |
-| 9 | `ExceedsWithdrawable` | The withdrawal amount is more than `withdrawable_amount`. |
-| 10 | `NotCancellable` | `cancel_stream` was called on a stream created with `cancellable = false`. |
-| 11 | `AlreadyFinalized` | The stream is already cancelled or completed. |
-| 12 | `MathOverflow` | Checked arithmetic overflowed or underflowed. |
-| 13 | `Paused` | `create_stream` was called while the contract is paused. |
+| 3 | `Unauthorized` | The cal
 
-### Vault contract (codes 1-7)
-
-| Code | Name | Meaning |
-|---|---|---|
-| 1 | `AlreadyInitialized` | `initialize` was called a second time. |
-| 2 | `NotInitialized` | A function ran before `initialize`. |
-| 3 | `Unauthorized` | The caller is not the configured Stream contract or the admin. |
-| 4 | `InvalidAmount` | An amount was zero or negative. |
-| 5 | `InsufficientBalance` | The stream's locked balance is smaller than the amount requested. |
-| 6 | `MathOverflow` | Checked arithmetic overflowed or underflowed. |
-| 7 | `TokenMismatch` | The token does not match the one the stream was funded with. |
-
-### Registry contract (codes 1-6)
-
-| Code | Name | Meaning |
-|---|---|---|
-| 1 | `AlreadyInitialized` | `initialize` was called a second time. |
-| 2 | `NotInitialized` | A function ran before `initialize`. |
-| 3 | `InvalidAmount` | An amount was negative. |
-| 4 | `AlreadyRegistered` | `register_stream` was called twice with the same `stream_id`. |
-| 5 | `StreamNotFound` | `update_stream` referenced a stream that was never registered. |
-| 6 | `MathOverflow` | Checked arithmetic overflowed or underflowed. |
-
-## Deployed contract addresses
-
-<CalloutBox variant="warning" title="Not yet deployed">
-  The Stream, Vault, and Registry contracts described in these docs are
-  specified and documented here, but **have not been deployed to any network
-  yet** -- development on
-  [`stellar-stream-hive-contract`](https://github.com/Stellar-Hive/stellar-stream-hive-contract)
-  is ongoing. Real, deployed contract addresses will be published in that
-  repository's `DEPLOYMENTS.md` once available, and this section will be
-  updated to link there directly. Until then, do not treat any address shown
-  elsewhere in these docs or in example code as real -- placeholders like
-  `STREAM_CONTRACT_ID=CONTRACT_ID_NOT_YET_DEPLOYED_SET_STREAM_CONTRACT_ID_ENV_VAR`
-  (the API's actual default, see
-  [`api/src/config.rs`](https://github.com/Stellar-Hive/stellar-stream-hive-api/blob/main/api/src/config.rs))
-  are deliberately obvious placeholders, not addresses.
-</CalloutBox>
-
-Once a testnet deployment exists, this section will list:
-
-- Stream contract address
-- Vault contract address
-- Registry contract address
-- The deployment's Stellar Asset Contract (SAC) id for XLM, for convenience
-
-...for both testnet and (later) mainnet.
+/* … truncated 3141 chars — edit only what you need near the top … */
