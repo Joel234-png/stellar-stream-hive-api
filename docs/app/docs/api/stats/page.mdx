@@ -34,6 +34,18 @@ curl http://localhost:8080/stats
 | `total_withdrawn` | string (i128) | Sum of `withdrawn` across every stream. |
 | `total_value_locked` | string (i128) | Funds the vault still holds for streams: `total_amount - withdrawn` for pending, active and completed streams, and only the recipient's unclaimed share (`streamed_now - withdrawn`) for cancelled ones, since the remainder was refunded to the sender. |
 
+### TypeScript interface
+
+```ts
+interface Stats {
+  total_streams: number;
+  active_streams: number;
+  total_streamed: string;
+  total_withdrawn: string;
+  total_value_locked: string;
+}
+```
+
 ### Worked example: `total_value_locked`
 
 Two streams, one active and one cancelled:
@@ -108,4 +120,3 @@ For the comparable fields, small differences are expected within the
 indexer's poll interval (10 seconds by default) as newly indexed events are
 picked up. Differences in `total_streamed`, `active_streams` or
 `total_value_locked` are not a sign of a bug -- they measure different things.
-=======

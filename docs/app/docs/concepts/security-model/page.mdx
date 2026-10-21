@@ -8,6 +8,14 @@ export const metadata = {
 
 # Security Model
 
+<CalloutBox variant="danger" title="Unaudited -- testnet only">
+  These contracts have not been externally audited. Do not use them with
+  funds you cannot afford to lose, and treat the guarantees described on this
+  page as design intent rather than audited fact. To report a vulnerability
+  privately, follow the disclosure process in the contract repo's
+  [SECURITY.md](https://github.com/Stellar-Hive/stellar-stream-hive-contract/blob/main/SECURITY.md).
+</CalloutBox>
+
 Stellar Stream Hive splits into three contracts on purpose:
 [Stream](/docs/contracts/stream), [Vault](/docs/contracts/vault), and
 [Registry](/docs/contracts/registry). This page explains the one design
@@ -125,20 +133,38 @@ of that same transaction's atomic execution.
 
 | Contract | Function | Who may call it | Enforced by |
 |---|---|---|---|
-| Stream | `initialize` | Deployer, once | One-time initialization guard (fails if already initialized) |
+| Stream | `initialize` | Deployer, once | `admin.require_auth()` + one-time initialization guard (fails if already initialized) |
 | Stream | `create_stream` | The intended sender (must authorize the deposit) | `sender.require_auth()` |
+| Stream | `pause` / `unpause` | Stream admin | `admin.require_auth()` against the stored admin |
+| Stream | `transfer_admin` | Current admin and the new admin | `require_auth()` on both addresses |
 | Stream | `withdraw` / `withdraw_max` | The stream's `recipient` | `recipient.require_auth()` |
 | Stream | `cancel_stream` | The stream's `sender`, and only if `cancellable` | `sender.require_auth()` + `cancellable` check |
 | Stream | `streamed_amount` / `withdrawable_amount` / `get_stream` / `get_status` / `get_streams_by_sender` / `get_streams_by_recipient` | Anyone (read-only) | No auth required -- these never move funds or change state |
-| Vault | `initialize` | Deployer, once | One-time initialization guard |
-| Vault | `set_stream_contract` | Vault admin | `admin.require_auth()` |
+| Vault | `initialize` | Deployer, once | `admin.require_auth()` + one-time initialization guard |
+| Vault | `set_stream_contract(admin, new_contract)` | Vault admin | `admin.require_auth()` against the stored admin |
 | Vault | `deposit` | Whoever is funding a stream (typically invoked by the Stream contract on the sender's behalf during `create_stream`) | `require_auth()` on the depositing party |
 | Vault | `release` | **The Stream contract only** | Caller-identity check against `stored_stream_contract_address` -- see above |
 | Vault | `refund` | **The Stream contract only** | Same caller-identity check as `release` |
 | Vault | `balance_of_stream` / `total_locked` | Anyone (read-only) | No auth required |
-| Registry | `initialize` | Deployer, once | One-time initialization guard |
-| Registry | `register_stream` / `update_stream` | The Stream contract only (Registry is a passive index fed by Stream) | Caller-identity check, same pattern as the Vault |
+| Registry | `initialize` | Deployer, once | `admin.require_auth()` + one-time initialization guard |
+| Registry | `register_stream` / `update_stream` | Anyone -- intentionally open (see [note](#registry-write-access-is-intentionally-open)) | No caller check; these functions take no caller and the Registry can never move funds |
 | Registry | `get_all_streams` / `get_stats` / `get_active_streams` | Anyone (read-only) | No auth required |
+
+### Registry write access is intentionally open
+
+`register_stream` and `update_stream` take no caller parameter, so there is
+no address for the Registry to run `require_auth()` against. This is
+deliberate: the Registry is an index that can never hold or move funds. See
+[why write access here is intentionally open](https://github.com/Stellar-Hive/stellar-stream-hive-contract/blob/main/docs/registry.md#security-notes-why-write-access-here-is-intentionally-open)
+in the contract repo. Consumers must not treat Registry data as
+authoritative; verify against the Stream contract itself.
+
+## Emergency pause
+
+The Stream admin can `pause` the contract. Pausing blocks only
+`create_stream`. It never blocks withdrawals or cancellations, so funds that
+are already streaming can always be withdrawn or cancelled. This is covered by
+[`test_pause_never_traps_existing_streams`](https://github.com/Stellar-Hive/stellar-stream-hive-contract/blob/main/contracts/stream/src/test.rs#L482) in the contract repo.
 
 <CalloutBox variant="info" title="Read-only functions are not a security concern">
   Every read-only function above is safe to expose with no authorization
