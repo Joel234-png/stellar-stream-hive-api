@@ -66,9 +66,9 @@ You do **not** need any of the above just to query existing streams -- the
 
 <CalloutBox variant="info">
   This walkthrough uses the Stellar CLI against testnet. It assumes the Stream
-  contract is already deployed and you have its `C...` address -- see
-  [Deployed contract addresses](#deployed-contract-addresses) below for where
-  that will be published once available.
+  contract is already deployed -- see
+  [Deployed contract addresses](#deployed-contract-addresses) below for testnet
+  deployment addresses from [`DEPLOYMENTS.md`](https://github.com/Stellar-Hive/stellar-stream-hive-contract/blob/main/DEPLOYMENTS.md).
 </CalloutBox>
 
 1. **Create and fund two testnet identities** -- one to act as sender, one as
@@ -191,6 +191,25 @@ start, not just the portion that accrues after the cliff.
 
 The API's indexer reads contract events from the Soroban RPC (`SOROBAN_RPC_URL`
 environment variable, default: testnet) -- see [`api/README.md`](https://github.com/Stellar-Hive/stellar-stream-hive-api/blob/main/api/README.md).
+
+## Deployed contract addresses
+
+<CalloutBox variant="info" title="Testnet deployed">
+  The Stream, Vault, and Registry contracts were deployed to testnet on 2026-10-12.
+  See [`DEPLOYMENTS.md`](https://github.com/Stellar-Hive/stellar-stream-hive-contract/blob/main/DEPLOYMENTS.md)
+  in the contract repository for the deployment addresses and configuration.
+</CalloutBox>
+
+<CalloutBox variant="warning" title="Mainnet not deployed">
+  The contracts are not yet deployed to mainnet and have not undergone a security audit.
+  Do not use on mainnet until both are complete.
+</CalloutBox>
+
+<CalloutBox variant="info">
+  Example contract addresses and IDs shown elsewhere in these docs (e.g. `<STREAM_CONTRACT_ID>`)
+  are placeholders. Always use the addresses from [`DEPLOYMENTS.md`](https://github.com/Stellar-Hive/stellar-stream-hive-contract/blob/main/DEPLOYMENTS.md)
+  for the network you're connecting to.
+</CalloutBox>
 
 ## Troubleshooting: error codes
 

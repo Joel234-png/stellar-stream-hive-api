@@ -16,8 +16,9 @@ passed to it -- its entire job is to hold deposits and release or refund them
 this page assumes you understand why that restriction exists.
 
 Source: [`stellar-stream-hive-contract`](https://github.com/Stellar-Hive/stellar-stream-hive-contract)
-(contract module `vault`). Deployment addresses are not yet published --
-see [Getting Started](/docs/getting-started#deployed-contract-addresses).
+(contract module `vault`). For testnet and mainnet deployment addresses, see
+[`DEPLOYMENTS.md`](https://github.com/Stellar-Hive/stellar-stream-hive-contract/blob/main/DEPLOYMENTS.md)
+in the contract repository.
 
 ## Types
 
@@ -28,8 +29,10 @@ pub enum VaultError {
     AlreadyInitialized = 1,
     NotInitialized = 2,
     Unauthorized = 3,          // caller is not the registered Stream contract
-    InsufficientBalance = 4,   // release/refund amount exceeds what's locked for this stream
-    InvalidAmount = 5,          // amount <= 0
+    InvalidAmount = 4,         // amount <= 0
+    InsufficientBalance = 5,   // release/refund amount exceeds what's locked for this stream
+    MathOverflow = 6,          // arithmetic overflow in balance calculations
+    TokenMismatch = 7,         // token type does not match what's locked for this stream
 }
 ```
 
