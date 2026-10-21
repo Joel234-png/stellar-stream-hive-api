@@ -36,8 +36,8 @@ pub struct RegistryStats {
 | Field | Meaning |
 |---|---|
 | `total_streams` | Count of every stream ever created, regardless of current status. |
-| `active_streams` | Count of streams currently in `Pending` or `Active` status. |
-| `total_streamed` | Sum of `streamed_amount` across every stream, evaluated at the ledger `get_stats` is called at. |
+| `active_streams` | Count of streams whose last-recorded status is `Active`. `Pending` does not count. |
+| `total_streamed` | Lifetime cumulative sum of every stream's committed `amount` at registration. It only ever goes up and is not live accrual. |
 | `total_withdrawn` | Sum of `withdrawn` across every stream. |
 
 ### `RegistryError`
@@ -120,6 +120,7 @@ Returns every stream id ever registered, oldest first. Intended for small
 deployments and tooling; for platform-scale queries prefer
 [`GET /streams`](/docs/api/streams) on the indexer API, which paginates and
 avoids loading the full on-chain vector into a transaction's execution budget.
+On-chain, prefer `get_streams_page` over `get_all_streams` for large registries.
 
 - **Auth:** none (read-only).
 
@@ -129,21 +130,12 @@ avoids loading the full on-chain vector into a transaction's execution budget.
 pub fn get_stats(env: Env) -> RegistryStats
 ```
 
-Returns the current `RegistryStats`. `total_streamed` reflects live accrual
-computed at call time using the same formula as
-[`streamed_amount`](/docs/contracts/stream#streamed_amount) on the Stream
-contract -- summed across every registered stream.
+Returns the current `RegistryStats`. The Registry keeps these as incremental
+counters, so this is a single read: its cost does not grow with the number of
+streams. `total_streamed` is the lifetime cumulative committed amount, not live
+accrual.
 
 - **Auth:** none (read-only).
-
-<CalloutBox variant="warning" title="Gas/execution cost of get_stats grows with stream count">
-  Because `get_stats` recomputes live accrual for every stream on every call,
-  its execution cost scales linearly with `total_streams`. This is fine for a
-  young platform; once volume is high, prefer the indexer API's
-  <a href="/docs/api/stats">`GET /stats`</a>, which computes the same figures
-  off-chain from already-decoded events with no per-request contract
-  invocation cost.
-</CalloutBox>
 
 ### `get_active_streams`
 
@@ -151,7 +143,7 @@ contract -- summed across every registered stream.
 pub fn get_active_streams(env: Env) -> Vec<u64>
 ```
 
-Returns the ids of every stream currently in `Pending` or `Active` status.
+Returns the ids of every stream whose last-recorded status is `Active`.
 
 - **Auth:** none (read-only).
 
@@ -168,17 +160,24 @@ the second topic:
 
 These are single-value events: the data is the amount itself, not a `Vec`. The
 Stream contract's `create`/`withdraw`/`cancel` events remain the lifecycle feed
-that `stellar-stream-hive-api` indexes. The consolidated table lives in
+that `stellar-stream-hive-api` indexes; the API does not need the Registry's
+events. The consolidated table lives in
 [Stream contract: events emitted](/docs/contracts/stream#events-emitted).
 
 ## Security notes
 
-- `register_stream` and `update_stream` use the same caller-identity
-  authorization pattern as the Vault's `release`/`refund` (see
-  [Security Model](/docs/concepts/security-model)), but the stakes are
-  different: a compromised Registry can only serve *incorrect statistics or
-  listings*, never move funds. Funds safety depends entirely on the Vault's
-  caller check, not the Registry's.
+- `register_stream` and `update_stream` take no caller and are intentionally
+  open: anyone can call them. The Registry never holds or moves funds, so the
+  worst a third party can do is corrupt its statistics and listings. Funds
+  safety depends entirely on the Vault's caller check (see
+  [Security Model](/docs/concepts/security-model)). See the contract repo's
+  [`docs/registry.md`](https://github.com/Stellar-Hive/stellar-stream-hive-contract/blob/main/docs/registry.md) for the rationale.
 - Because of that lower stakes profile, the Registry is a reasonable place to
   add caching, pagination, or alternate indexing strategies over time without
   touching the fund-safety-critical parts of the platform.
+
+<CalloutBox variant="warning" title="Registry data is not a source of truth">
+  Because anyone can write to the Registry, its stats and stream listings can
+  be polluted by third parties. Do not treat Registry data as authoritative;
+  verify against the Stream contract.
+</CalloutBox>
