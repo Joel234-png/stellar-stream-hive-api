@@ -51,9 +51,13 @@ To create or interact with a stream you'll need:
 - **Node.js 18+**, only if you're running the
   [web app](https://github.com/Stellar-Hive/stellar-stream-hive-frontend) or
   this docs site locally.
-- **Rust + the `wasm32-unknown-unknown` target**, only if you're building the
+- **Rust + the `wasm32v1-none` target**, only if you're building the
   [contracts](https://github.com/Stellar-Hive/stellar-stream-hive-contract)
-  from source.
+  from source. The contract repo pins `wasm32v1-none` (via its
+  `rust-toolchain.toml`) because soroban-sdk 27.x rejects the older
+  `wasm32-unknown-unknown` target on Rust 1.82+ -- see the
+  [contract repo's CONTRIBUTING setup section](https://github.com/Stellar-Hive/stellar-stream-hive-contract/blob/main/CONTRIBUTING.md#setup)
+  for the exact toolchain and target install steps.
 
 You do **not** need any of the above just to query existing streams -- the
 [indexer API](/docs/api/overview) is a plain public REST endpoint.
