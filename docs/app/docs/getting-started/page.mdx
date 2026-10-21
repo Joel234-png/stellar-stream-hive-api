@@ -109,10 +109,13 @@ stellar contract invoke \
   -- withdrawable_amount --stream_id 0
 ```
 
-   or query the indexer API once it has picked up the `create` event
-   (polls every 10 seconds -- see [API Reference](/docs/api/overview)):
+   or query the indexer API once it is ready and has picked up the `create`
+   event (polls every 10 seconds -- first check [`GET /ready`](/docs/api/overview#get-ready)
+   reports `synced: true` and `contract_configured: true`, then query the
+   stream; see [API Reference](/docs/api/overview)):
 
 ```bash
+curl https://<your-api-host>/ready
 curl https://<your-api-host>/streams/0
 ```
 
@@ -123,7 +126,9 @@ stellar contract invoke \
   --id <STREAM_CONTRACT_ID> \
   --source recipient \
   --network testnet \
-  -- withdraw_max --stream_id 0
+  -- withdraw_max \
+  --recipient "$(stellar keys address recipient)" \
+  --stream_id 0
 ```
 
 That's the entire lifecycle. For the fund-safety reasoning behind why
