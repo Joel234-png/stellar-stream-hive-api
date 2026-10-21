@@ -62,6 +62,25 @@ web app does is privileged or otherwise unavailable to you directly.
 4. Once confirmed, the new stream appears on your dashboard with status
    **Pending** (if its start time is in the future) or **Active**.
 
+### Custom token detection
+
+When you enter a token contract address, the app reads the token's `symbol()`
+and `decimals()` from the contract to display a friendly token name and to
+convert your amount into the token's smallest unit. If the contract does not
+expose those functions (or the call fails), the app falls back to manual
+entry: you supply the symbol and decimals yourself, and the form shows a
+warning that the values could not be auto-detected. Double-check the decimals
+you enter in that case -- the app trusts them for the conversion.
+
+<CalloutBox variant="warning" title="Wrong decimals change how much is deposited">
+  The **Amount** you type is multiplied by `10^decimals` to produce the raw
+  integer the contract stores. If the decimals value is wrong, the deposited
+  amount is off by that factor: too few decimals under-deposits (e.g. entering
+  `1` with `decimals = 0` locks one whole unit instead of a fraction), and too
+  many over-deposits by the same factor. Confirm the token's decimals before
+  signing, especially when the app could not detect them automatically.
+</CalloutBox>
+
 <CalloutBox variant="warning" title="Dates are estimates, ledgers are exact">
   The **Start**, **End**, and **Cliff** dates are converted to ledgers using
   roughly 5 seconds per ledger. Real ledger close times vary, so the date you
