@@ -54,11 +54,11 @@ address is allowed to call `release` and `refund`.** That address is set once,
 at deployment, via `set_stream_contract`, and every call to `release` or
 `refund` checks the immediate caller against it:
 
-```text
-fn release(env: Env, stream_id: u64, to: Address, amount: i128) {
-    let caller = env.current_contract_address(); // conceptually: the invoker
+```rust
+fn release(env: Env, caller: Address, to: Address, token: Address, amount: i128, stream_id: u64) {
+    caller.require_auth(); // prove the caller is who they claim
     require(caller == stored_stream_contract_address, "unauthorized caller");
-    // ... transfer `amount` of the stream's token to `to` ...
+    // ... transfer `amount` of `token` to `to` ...
 }
 ```
 
@@ -73,29 +73,28 @@ fn release(env: Env, stream_id: u64, to: Address, amount: i128) {
   entirely and drain the Vault directly.
 </CalloutBox>
 
-In Soroban terms, this is enforced with the invoking contract's address (the
-authenticated caller identity Soroban provides to a called contract), *not*
-with a signature check or a passed-in parameter the caller could simply lie
-about. A parameter like `release(claimed_caller: Address, ...)` would be
-worthless as a security check -- nothing stops any address from calling
+The `caller` parameter is safe because it is verified with `caller.require_auth()`,
+which proves that the caller controls that address -- Soroban's signature
+verification makes it impossible for one address to impersonate another.
+Once authenticated, the caller is compared against the stored Stream contract
+address. A parameter like `release(claimed_caller: Address, ...)` without
+authentication would be worthless -- nothing stops any address from calling
 `release` and passing whatever `claimed_caller` value it wants. The check must
-bind to Soroban's own notion of "who is invoking me right now," which cannot
-be forged by the caller.
+bind to a cryptographically proven identity, not a passed-in value.
 
 ## What an attacker would try
 
-**Attack: call `vault.release(stream_id, attacker_address, total_amount)`
+**Attack: call `vault.release(attacker_address, attacker_address, token, amount, stream_id)`
 directly, skipping the Stream contract entirely.**
 
 This is the obvious attack once you know the Vault holds the funds: why go
 through the Stream contract's withdrawal math at all if you can just ask the
-Vault to pay out? It fails at the first line of `release` -- the caller is the
-attacker's own address (or whatever contract they invoked from), not the
-Stream contract's address, so the equality check fails and the call aborts
-before any transfer happens. This is true no matter what arguments the
-attacker passes; there is no `stream_id` or `amount` that satisfies the
-caller check, because the check never inspects those arguments in the first
-place.
+Vault to pay out? It fails at the first step: `caller.require_auth()` succeeds
+(the attacker can sign with their own address), but the equality check
+`caller == stored_stream_contract_address` fails -- the caller is the attacker's
+address, not the Stream contract's address. The call aborts before any transfer
+happens. This is true no matter what other arguments the attacker passes; the
+authentication and comparison checks are the only things that matter.
 
 **Attack: deploy a malicious contract that impersonates the Stream contract's
 interface, and get the Vault to accept calls from it.**
