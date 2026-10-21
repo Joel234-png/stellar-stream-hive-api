@@ -69,6 +69,25 @@ web app does is privileged or otherwise unavailable to you directly.
   on-chain schedule is the ledger numbers, not the calendar dates.
 </CalloutBox>
 
+## Your streams
+
+Two pages list the streams tied to your connected wallet:
+
+- **Sending** (`/sending`) -- streams you created as the sender.
+- **Receiving** (`/receiving`) -- streams where you are the recipient.
+
+Each list can be narrowed with the status filters **All**, **Live**,
+**Completed**, and **Cancelled**, and exported to CSV for record-keeping or
+spreadsheet analysis.
+
+<CalloutBox variant="info" title="These lists need the indexer API">
+  The **Sending** and **Receiving** pages read from the
+  [indexer API](/docs/api/overview), configured via the
+  `NEXT_PUBLIC_API_BASE_URL` environment variable. If that variable is unset
+  or the API is unreachable, these lists will be empty or fail to load even
+  though the streams exist on-chain.
+</CalloutBox>
+
 ## Watching a balance accrue
 
 Open any stream's detail page to see a live-updating progress bar and two
@@ -129,3 +148,21 @@ Only visible to the sender, and only when the stream was created with
   permanently at that ledger. If you're unsure, double-check the amounts
   shown in the confirmation dialog before signing.
 </CalloutBox>
+
+## Troubleshooting
+
+### "Wrong network" badge
+
+**Symptom:** the app shows a **Wrong network** badge (often next to your
+connected address) and actions like creating or withdrawing a stream are
+disabled or fail.
+
+**Cause:** Freighter is set to a different network than the one the web app
+is configured for. The app compares the wallet's active network against its
+own configuration and warns when they don't match.
+
+**Fix:** open Freighter's network selector and switch to the network that
+matches the app's configuration (by default, **Test Net**). The badge clears
+once the two agree. If you intentionally need a different network, see the
+network table in the [Network Guide](/docs/getting-started#network-guide) to
+confirm which network the app is pointed at.
