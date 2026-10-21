@@ -12,7 +12,10 @@ The Registry contract maintains an on-chain index of every stream and
 platform-wide aggregate statistics. It exists so that "list all streams" or
 "what's the platform's total volume" can be answered by a single contract
 call, without an off-chain indexer walking every `create` event from
-genesis. `stellar-stream-hive-api`'s own `/stats` endpoint mirrors the shape
+genesis. The Stream contract does not call the Registry: the Registry is
+optional and is populated today by a separate caller (for example an off-chain
+service) invoking `register_stream` and `update_stream` after the corresponding
+Stream events. `stellar-stream-hive-api`'s own `/stats` endpoint mirrors the shape
 of `get_stats` (computed independently from indexed events, as a
 cross-check) -- see [API Reference: Stats](/docs/api/stats).
 
@@ -123,6 +126,53 @@ avoids loading the full on-chain vector into a transaction's execution budget.
 On-chain, prefer `get_streams_page` over `get_all_streams` for large registries.
 
 - **Auth:** none (read-only).
+
+### `stream_count`
+
+```rust
+pub fn stream_count(env: Env) -> u32
+```
+
+Returns the number of streams ever registered.
+
+- **Auth:** none (read-only).
+- **Errors:** none documented.
+
+### `get_streams_page`
+
+```rust
+pub fn get_streams_page(env: Env, offset: u32, limit: u32) -> Vec<u64>
+```
+
+Returns a registration-ordered page of stream ids. `limit` is capped at
+`MAX_PAGE_SIZE` (50); an `offset` past the end returns an empty vec. Prefer
+this over [`get_all_streams`](#get_all_streams) on a large registry.
+
+- **Auth:** none (read-only).
+- **Errors:** none documented.
+
+### `get_stream_record`
+
+```rust
+pub fn get_stream_record(env: Env, stream_id: u64) -> StreamRecord
+```
+
+Read-only accessor for a single stream's registry-side summary: sender,
+recipient, token, amount, withdrawn and status.
+
+- **Auth:** none (read-only).
+- **Errors:** `StreamNotFound` if no stream with that id is registered.
+
+### `get_admin`
+
+```rust
+pub fn get_admin(env: Env) -> Address
+```
+
+Returns the admin address recorded at `initialize`.
+
+- **Auth:** none (read-only).
+- **Errors:** `NotInitialized` if called before `initialize`.
 
 ### `get_stats`
 

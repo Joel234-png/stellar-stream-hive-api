@@ -363,7 +363,29 @@ recipient_gets  = streamed_at_cancel        # everything vested so far becomes
 sender_refund   = total_amount - streamed_at_cancel
 ```
 
-`recipient_gets + sender_refund == total_amount` always &mdash; cancellation
+**Cancelling before the cliff pays the recipient nothing.** If
+`cancel_ledger < cliff_ledger`, `streamed_amount` is frozen at `0` rather than
+at the formula's value, because the recipient could never have withdrawn
+anything accrued before the cliff. The sender is refunded the full
+`total_amount`:
+
+```text
+if cancel_ledger < cliff_ledger:
+    streamed_at_cancel = 0
+    recipient_gets     = 0
+    sender_refund      = total_amount
+```
+
+For example, take the 3,000 XLM, 30-day stream from the worked example
+(`total_amount = 30_000_000_000` stroops, 518,400 ledgers) with a 10-day cliff
+(`cliff_ledger = start_ledger + 172,800`):
+
+| Cancelled at | Before cliff? | `streamed_at_cancel` | `recipient_gets` | `sender_refund` |
+|---|---|---|---|---|
+| Day 5 (`start_ledger + 86,400`) | yes | 0 | 0 XLM | 3,000 XLM |
+| Day 15 (`start_ledger + 259,200`) | no | 15,000,000,000 | 1,500 XLM | 1,500 XLM |
+
+`recipient_gets + sender_refund == total_amount` in both cases &mdash; cancellation
 can never create or destroy funds, only stop future accrual. If the recipient
 had already withdrawn part of `streamed_at_cancel`, only the remainder
 (`streamed_at_cancel - withdrawn`) is newly transferred to them at cancellation
@@ -378,7 +400,8 @@ time; the rest was already in their hands. See
 | `current_ledger < start_ledger` | `0` | Nothing has begun accruing yet. |
 | `current_ledger < cliff_ledger` (but `>= start_ledger`) | Computed normally by the formula, but `withdrawable_amount` is forced to `0` | Accrual and withdrawability are separate gates -- see [Cliff behavior](#cliff-behavior). |
 | `current_ledger >= end_ledger` | `total_amount` exactly | `elapsed` is clamped to `total_duration` in Step 1, so the result can never exceed `total_amount`, no matter how far past `end_ledger` you read. |
-| `start_ledger == end_ledger` (zero duration) | `total_amount`, the instant `current_ledger >= start_ledger` | Dividing by a zero `total_duration` is undefined, so this is special-cased to "fully vested at start" rather than dividing by zero. The Stream contract's `create_stream` should reject zero-duration streams outright at creation time -- this branch exists purely so the math is total (never panics) even if that validation is ever bypassed. |
+| `start_ledger == end_ledger` (zero duration), **contract** | Rejected: `create_stream` fails with `InvalidTimeRange`, and the contract's `math::streamed_amount` returns that error instead of `total_amount` | A zero-duration stream cannot exist on-chain, so there is nothing to accrue. |
+| `start_ledger == end_ledger` (zero duration), **API / frontend** | `total_amount`, the instant `current_ledger >= start_ledger` | Dividing by a zero `total_duration` is undefined, so clients special-case it to "fully vested at start" rather than dividing by zero. This branch exists purely so the client-side math is total (never panics) even for input the contract would reject. |
 | `total_amount == 0` | `0` at every ledger | Degenerate but harmless; `progress_percent` also reports `0` rather than dividing by zero. |
 
 <CalloutBox variant="success" title="Try it yourself">
