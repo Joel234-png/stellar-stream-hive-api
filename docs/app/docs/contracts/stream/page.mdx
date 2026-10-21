@@ -18,8 +18,9 @@ by invoking its `register_stream` and `update_stream` functions after the
 corresponding Stream events.
 
 Source: [`stellar-stream-hive-contract`](https://github.com/Stellar-Hive/stellar-stream-hive-contract)
-(contract module `stream`). Deployment addresses are not yet published --
-see [Getting Started](/docs/getting-started#deployed-contract-addresses).
+(contract module `stream`). For testnet and mainnet deployment addresses, see
+[`DEPLOYMENTS.md`](https://github.com/Stellar-Hive/stellar-stream-hive-contract/blob/main/DEPLOYMENTS.md)
+in the contract repository.
 
 ## Types
 
@@ -444,10 +445,49 @@ pub fn count_streams_by_recipient(env: Env, recipient: Address) -> u32
 
 Returns every stream where the given address is the sender (or recipient),
 with `status` recomputed for the current ledger. The `_page` variants return
-creation-ordered slices with `limit` capped at 50, and the `count_` variants
+creation-ordered slices with `limit` capped at 50 items per page, and the `count_` variants
 return the total -- prefer them for addresses with many streams.
 
 - **Auth:** none (read-only).
+
+<CalloutBox variant="info" title="Pagination with `_page` variants">
+  The `_page` variants accept an `offset` and `limit` parameter. Requests with a `limit` exceeding 50
+  are capped at 50. When an offset points past the end of the list, an empty vector is returned
+  (not an error). Loop through all streams by calling with offsets of 0, 50, 100, etc., until you
+  receive an empty page.
+</CalloutBox>
+
+#### Paging example: all streams sent by an address
+
+Use the Stellar CLI to count streams, then page through them in 50-item chunks:
+
+```bash
+# Count total streams
+stellar contract invoke \
+  --id <STREAM_CONTRACT_ID> \
+  --network testnet \
+  -- count_streams_by_sender \
+  --sender "$(stellar keys address sender)"
+
+# Page through results in 50-item chunks (offset 0, 50, 100, ...)
+stellar contract invoke \
+  --id <STREAM_CONTRACT_ID> \
+  --network testnet \
+  -- get_streams_by_sender_page \
+  --sender "$(stellar keys address sender)" \
+  --offset 0 \
+  --limit 50
+
+stellar contract invoke \
+  --id <STREAM_CONTRACT_ID> \
+  --network testnet \
+  -- get_streams_by_sender_page \
+  --sender "$(stellar keys address sender)" \
+  --offset 50 \
+  --limit 50
+```
+
+Continue with `--offset 100`, `--offset 150`, etc. until the response is empty.
 
 ### `get_status`
 
@@ -463,19 +503,79 @@ on-chain.
 - **Auth:** none (read-only).
 - **Errors:** `StreamNotFound`.
 
-### `pause` / `unpause` / `is_paused` / `transfer_admin`
+### `get_admin`
+
+```rust
+pub fn get_admin(env: Env) -> Result<Address, StreamError>
+```
+
+Returns the address of the current contract admin (set at initialization).
+
+- **Auth:** none (read-only).
+- **Errors:** `NotInitialized`.
+
+### `get_vault`
+
+```rust
+pub fn get_vault(env: Env) -> Result<Address, StreamError>
+```
+
+Returns the address of the Vault contract (set at initialization). Use this to
+verify a deployment matches the expected Vault address from
+[`DEPLOYMENTS.md`](https://github.com/Stellar-Hive/stellar-stream-hive-contract/blob/main/DEPLOYMENTS.md).
+
+- **Auth:** none (read-only).
+- **Errors:** `NotInitialized`.
+
+### `pause`
 
 ```rust
 pub fn pause(env: Env) -> Result<(), StreamError>
+```
+
+Pauses new stream creation. While paused, `create_stream` fails with `Paused`;
+`withdraw`, `withdraw_max` and `cancel_stream` keep working, so a pause can
+never trap funds that are already streaming.
+
+- **Auth:** admin.require_auth().
+- **Errors:** none (always succeeds if authorized).
+- **Events:** emits `pause`.
+
+### `unpause`
+
+```rust
 pub fn unpause(env: Env) -> Result<(), StreamError>
+```
+
+Resumes stream creation after a pause.
+
+- **Auth:** admin.require_auth().
+- **Errors:** none (always succeeds if authorized).
+- **Events:** emits `unpause`.
+
+### `is_paused`
+
+```rust
 pub fn is_paused(env: Env) -> bool
+```
+
+Returns whether stream creation is currently paused. Read-only; no auth required.
+
+- **Auth:** none (read-only).
+
+### `transfer_admin`
+
+```rust
 pub fn transfer_admin(env: Env, new_admin: Address) -> Result<(), StreamError>
 ```
 
-Admin-only controls. While paused, `create_stream` fails with `Paused`;
-`withdraw`, `withdraw_max` and `cancel_stream` keep working, so a pause can
-never trap funds that are already streaming. `transfer_admin` requires
-authorization from both the current and the new admin.
+Transfers admin privileges to a new address. Requires authorization from both
+the current admin and the new admin, protecting against accidental or malicious
+transfers to an address that cannot accept the role.
+
+- **Auth:** both `admin.require_auth()` (current admin) and `new_admin.require_auth()` (new admin).
+- **Errors:** `Unauthorized` (if either required signature is missing).
+- **Events:** emits `admin_transfer`.
 
 ## Events emitted
 
